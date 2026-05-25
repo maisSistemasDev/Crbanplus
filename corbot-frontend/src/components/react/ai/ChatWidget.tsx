@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Bot, X, Send, Loader2, MessageSquare, ChevronDown } from 'lucide-react';
+import { Bot, X, Send, Loader2, MessageSquare, ChevronDown, MapPin } from 'lucide-react';
 import { api } from '../../../lib/api/client';
 import { ENDPOINTS } from '../../../lib/api/endpoints';
 import { pendingTour } from '../../../lib/tour/store';
@@ -8,6 +8,13 @@ import type { AiConversation, AiMessage } from '../../../lib/api/types';
 
 function Message({ msg }: { msg: AiMessage }) {
   const isUser = msg.role === 'user';
+
+  function handleStartTour() {
+    if (!msg.tour_name) return;
+    const steps = TOURS[msg.tour_name];
+    if (steps) pendingTour.set(steps);
+  }
+
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-3`}>
       {!isUser && (
@@ -15,14 +22,25 @@ function Message({ msg }: { msg: AiMessage }) {
           <Bot size={14} className="text-white" />
         </div>
       )}
-      <div
-        className={`max-w-[80%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${
-          isUser
-            ? 'bg-indigo-600 text-white rounded-tr-sm'
-            : 'bg-gray-100 text-gray-800 rounded-tl-sm'
-        }`}
-      >
-        {msg.content}
+      <div className="max-w-[80%] flex flex-col gap-2">
+        <div
+          className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${
+            isUser
+              ? 'bg-indigo-600 text-white rounded-tr-sm'
+              : 'bg-gray-100 text-gray-800 rounded-tl-sm'
+          }`}
+        >
+          {msg.content}
+        </div>
+        {!isUser && msg.tour_name && TOURS[msg.tour_name] && (
+          <button
+            onClick={handleStartTour}
+            className="flex items-center gap-1.5 self-start px-3 py-1.5 text-xs font-medium rounded-full bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition-colors"
+          >
+            <MapPin size={12} />
+            Iniciar tour
+          </button>
+        )}
       </div>
     </div>
   );
@@ -75,18 +93,13 @@ export function ChatWidget() {
 
       const replyText = res.reply ?? '';
 
-      // Dispara tour se a IA sugeriu
-      if (res.tour_name) {
-        const steps = TOURS[res.tour_name];
-        if (steps) pendingTour.set(steps);
-      }
-
       const assistantMsg: AiMessage = {
         id: Date.now() + 1,
         role: 'assistant',
         content: replyText,
         tool_calls: null,
         created_at: new Date().toISOString(),
+        tour_name: res.tour_name ?? null,
       };
       setMessages((prev) => [...prev, assistantMsg]);
     } catch {

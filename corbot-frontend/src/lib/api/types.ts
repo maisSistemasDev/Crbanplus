@@ -376,6 +376,7 @@ export interface AiMessage {
   content: string;
   tool_calls: unknown | null;
   created_at: string;
+  tour_name?: string | null;
 }
 
 export interface AiConversation {
