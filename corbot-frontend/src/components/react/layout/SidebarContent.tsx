@@ -17,7 +17,8 @@ interface MenuItem {
   icon: React.ReactNode;
   label: string;
   href: string;
-  children?: { label: string; href: string }[];
+  tourId?: string;
+  children?: { label: string; href: string; tourId?: string }[];
 }
 
 function getMenuItems(role: Role): MenuItem[] {
@@ -30,24 +31,26 @@ function getMenuItems(role: Role): MenuItem[] {
       icon: <Users size={iconSize} />,
       label: 'Usuarios',
       href: '/users',
+      tourId: 'sidebar-users',
       children: [
         { label: 'Todos', href: '/users' },
         { label: 'Vendedores', href: '/users/sellers' },
         { label: 'Lideres', href: '/users/leaders' },
         { label: 'Gerentes', href: '/users/managers' },
         { label: 'Corbans', href: '/users/corbans' },
-        { label: 'Criar', href: '/users/create' },
-        { label: 'Importar CSV', href: '/users/import' },
+        { label: 'Criar', href: '/users/create', tourId: 'create-user-link' },
+        { label: 'Importar CSV', href: '/users/import', tourId: 'import-csv-link' },
       ],
     },
     {
       icon: <Landmark size={iconSize} />,
       label: 'Bancos',
       href: '/banks',
+      tourId: 'sidebar-banks',
       children: [
         { label: 'Bancos', href: '/banks' },
         { label: 'Convenios', href: '/agreements' },
-        { label: 'Tabelas', href: '/tables' },
+        { label: 'Tabelas', href: '/tables', tourId: 'tables-link' },
       ],
     },
     {
@@ -75,6 +78,7 @@ function getMenuItems(role: Role): MenuItem[] {
       icon: <UsersRound size={iconSize} />,
       label: 'Equipes',
       href: '/commission-groups',
+      tourId: 'sidebar-commission-groups',
       children: [
         { label: 'Grupos', href: '/commission-groups' },
         { label: 'Por Empresa', href: '/commission-groups/by-company' },
@@ -113,12 +117,7 @@ function getMenuItems(role: Role): MenuItem[] {
         { label: 'Saque CorbanPay', href: '/withdrawals/corbanpay' },
       ],
     },
-    { icon: <UsersRound size={iconSize} />, label: 'Equipes', href: '/commission-groups' },
-    { icon: <CreditCard size={iconSize} />, label: 'Pagamentos', href: '/payments' },
-    { icon: <Settings size={iconSize} />, label: 'Configuracoes', href: '/settings' },
-  ];
-
-  const gerente: MenuItem[] = [
+    { icon: <UsersRound size={iconSize} />, label: 'Equipes', href: '/commission-groups', tourId: 'sidebar-commission-groups' },: MenuItem[] = [
     { icon: <LayoutDashboard size={iconSize} />, label: 'Dashboard', href: '/dashboard' },
     {
       icon: <Users size={iconSize} />,
@@ -195,6 +194,7 @@ function SidebarItem({
       <div>
         <button
           onClick={() => setOpen(!open)}
+          data-tour={item.tourId}
           className={clsx(
             'w-full flex items-center gap-3 px-4 py-2.5 text-sm rounded-lg transition-colors',
             isActive
@@ -212,6 +212,7 @@ function SidebarItem({
               <a
                 key={child.href}
                 href={child.href}
+                data-tour={child.tourId}
                 className={clsx(
                   'block px-3 py-2 text-sm rounded-lg transition-colors',
                   currentPath === child.href

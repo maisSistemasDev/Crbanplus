@@ -2,12 +2,121 @@ import type { TourStep } from './store';
 
 /**
  * Tours estáticos pré-definidos por nome.
- * O agente pode referenciar qualquer chave deste mapa sem precisar
- * descrever cada step individualmente.
  *
- * Convenção de data-tour IDs: kebab-case, descritivo do elemento.
+ * Regras:
+ * - Passos sem `url` existem em TODAS as páginas (ex: sidebar).
+ * - Passos com `url` só existem na página indicada.
+ * - O driver.ts navega automaticamente entre páginas via localStorage.
+ * - Selectors usam data-tour attributes adicionados nos componentes.
  */
 export const TOURS: Record<string, TourStep[]> = {
+  'criar-grupo-comissao': [
+    {
+      element: "[data-tour='sidebar-commission-groups']",
+      title: 'Menu Equipes',
+      description: 'Clique aqui para gerenciar todos os grupos de comissionamento.',
+      side: 'right',
+    },
+    {
+      element: "[data-tour='create-group-btn']",
+      title: 'Nova Equipe',
+      description: 'Clique neste botão para criar um novo grupo de comissionamento.',
+      side: 'bottom',
+      url: '/commission-groups',
+    },
+    {
+      element: "[data-tour='commission-rules-table']",
+      title: 'Regras de Comissão',
+      description: 'Aqui você define as taxas de comissão por tabela bancária para cada membro do grupo.',
+      side: 'top',
+      url: '/commission-groups',
+    },
+  ],
+
+  'aceitar-sugestao-tabela': [
+    {
+      element: "[data-tour='pending-suggestions-badge']",
+      title: 'Sugestão Pendente',
+      description: 'Uma tabela bancária foi atualizada. A IA sugeriu ajustes para manter suas equipes equilibradas.',
+      side: 'bottom',
+      url: '/commission-groups',
+    },
+    {
+      element: "[data-tour='suggestion-card']",
+      title: 'Detalhes da Sugestão',
+      description: 'Compare a configuração atual com a sugestão da IA. Clique em "Ver detalhes" para ver as taxas.',
+      side: 'top',
+      url: '/commission-groups',
+    },
+    {
+      element: "[data-tour='accept-suggestion-btn']",
+      title: 'Aceitar ou Rejeitar',
+      description: 'Clique em Aceitar para aplicar as novas taxas automaticamente, ou Rejeitar para manter as atuais.',
+      side: 'bottom',
+      url: '/commission-groups',
+    },
+  ],
+
+  'importar-csv': [
+    {
+      element: "[data-tour='sidebar-users']",
+      title: 'Menu Usuários',
+      description: 'Abra o menu de Usuários para acessar a importação em lote.',
+      side: 'right',
+    },
+    {
+      element: "[data-tour='import-csv-link']",
+      title: 'Importar CSV',
+      description: 'Clique aqui para ir à página de importação de usuários por arquivo CSV.',
+      side: 'right',
+    },
+    {
+      element: "[data-tour='csv-upload-area']",
+      title: 'Área de Upload',
+      description: 'Arraste o arquivo CSV ou clique para selecionar. Use o botão de template para baixar o modelo correto.',
+      side: 'bottom',
+      url: '/users/import',
+    },
+  ],
+
+  'configurar-tabela': [
+    {
+      element: "[data-tour='sidebar-banks']",
+      title: 'Menu Bancos',
+      description: 'As tabelas bancárias ficam dentro do menu Bancos.',
+      side: 'right',
+    },
+    {
+      element: "[data-tour='tables-link']",
+      title: 'Tabelas',
+      description: 'Acesse a listagem de todas as tabelas cadastradas pelos bancos.',
+      side: 'right',
+    },
+  ],
+
+  'criar-vendedor': [
+    {
+      element: "[data-tour='sidebar-users']",
+      title: 'Menu Usuários',
+      description: 'Comece abrindo o menu de Usuários no painel lateral.',
+      side: 'right',
+    },
+    {
+      element: "[data-tour='create-user-link']",
+      title: 'Criar Usuário',
+      description: 'Clique em Criar para abrir o formulário de cadastro de novo usuário.',
+      side: 'right',
+    },
+    {
+      element: "[data-tour='user-form-role']",
+      title: 'Papel do Usuário',
+      description: 'Selecione "Vendedor" para que o usuário seja vinculado a grupos de comissionamento.',
+      side: 'bottom',
+      url: '/users/create',
+    },
+  ],
+};
+
   'criar-grupo-comissao': [
     {
       element: "[data-tour='sidebar-commission-groups']",

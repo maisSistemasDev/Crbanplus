@@ -212,6 +212,7 @@ function TabPanel({ tab }: { tab: typeof TABS[0] }) {
 
       {/* Drop zone */}
       <div
+        data-tour="csv-upload-area"
         onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
         onDragLeave={() => setDragging(false)}
         onDrop={handleDrop}

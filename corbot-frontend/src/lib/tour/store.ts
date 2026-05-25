@@ -1,12 +1,17 @@
 import { atom } from 'nanostores';
 
 export type TourStep = {
-  /** Seletor CSS ou atributo data-tour, ex: "[data-tour='create-group-btn']" */
+  /** Seletor CSS do elemento a destacar, ex: "[data-tour='create-group-btn']" */
   element: string;
   title: string;
   description: string;
   side?: 'top' | 'bottom' | 'left' | 'right';
   align?: 'start' | 'center' | 'end';
+  /**
+   * Caminho da página onde este elemento existe, ex: '/commission-groups'.
+   * Omitir para elementos presentes em todas as páginas (ex: sidebar).
+   */
+  url?: string;
 };
 
 /**

@@ -302,7 +302,7 @@ export function TeamBuilder({ groupId }: TeamBuilderProps) {
       </div>
 
       {/* Commission Rules */}
-      <div className="mt-8">
+      <div className="mt-8" data-tour="commission-rules-table">
         <CommissionRulesEditor
           groupId={groupId}
           ruleType={group?.company === null ? 'promotora' : 'group'}

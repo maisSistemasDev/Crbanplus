@@ -166,7 +166,7 @@ export function CommissionGroupList() {
       <SuggestionsBanner />
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Equipes de Comissao</h1>
-        <Button onClick={openCreate}>
+        <Button onClick={openCreate} data-tour="create-group-btn">
           <Plus size={16} />
           Nova Equipe
         </Button>

@@ -33,14 +33,16 @@ function DynamicFormField({
 
     case 'select':
       return (
-        <Select
-          label={field.label}
-          required={field.required}
-          options={field.options}
-          options_url={field.options_url}
-          value={value ?? ''}
-          onChange={(e) => onChange(field.name, e.target.value)}
-        />
+        <div data-tour={field.name === 'role' ? 'user-form-role' : undefined}>
+          <Select
+            label={field.label}
+            required={field.required}
+            options={field.options}
+            options_url={field.options_url}
+            value={value ?? ''}
+            onChange={(e) => onChange(field.name, e.target.value)}
+          />
+        </div>
       );
 
     case 'checkbox':
