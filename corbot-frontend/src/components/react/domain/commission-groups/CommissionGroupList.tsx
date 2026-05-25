@@ -12,6 +12,7 @@ import type { Column } from '../../ui/DataTable';
 import { Plus, Search, Users, Trash2, PowerOff, Power } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { CommissionGroupForm } from './CommissionGroupForm';
+import { SuggestionsBanner } from '../ai-agent/SuggestionsBanner';
 
 export function CommissionGroupList() {
   const [data, setData] = useState<Record<string, unknown>[]>([]);
@@ -162,6 +163,7 @@ export function CommissionGroupList() {
 
   return (
     <div>
+      <SuggestionsBanner />
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Equipes de Comissao</h1>
         <Button onClick={openCreate}>

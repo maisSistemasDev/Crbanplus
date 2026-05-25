@@ -203,3 +203,74 @@ class ConversationDetailView(BaseApiView):
 
         conversation.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ConversationMessageView(BaseApiView):
+    """
+    Recebe uma mensagem do usuário, salva no histórico e retorna uma resposta do agente.
+    Fase 1: resposta baseada em regras simples (sem LLM).
+    Fase 2: trocar _generate_reply por chamada ao PydanticAI.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    # Respostas simples para Fase 1 (sem LLM)
+    _SIMPLE_REPLIES = {
+        'grupo': (
+            'Para criar uma equipe de comissão, acesse o menu lateral **Equipes** '
+            'e clique em **Nova Equipe**. Vou te mostrar onde fica!'
+            '\n```json\n{"type": "tour", "tour_name": "criar-grupo-comissao"}\n```'
+        ),
+        'sugest': (
+            'As sugestões de atualização aparecem no topo da página de Equipes quando '
+            'uma tabela bancária é atualizada. Posso te guiar até lá!'
+            '\n```json\n{"type": "tour", "tour_name": "aceitar-sugestao-tabela"}\n```'
+        ),
+        'csv': (
+            'Você pode importar tabelas por CSV no menu **Tabelas**. '
+            'Posso te mostrar o processo!'
+            '\n```json\n{"type": "tour", "tour_name": "importar-csv"}\n```'
+        ),
+        'tabela': (
+            'As tabelas bancárias ficam em **Bancos → Tabelas**. '
+            'Quer que eu te guie até a configuração?'
+            '\n```json\n{"type": "tour", "tour_name": "configurar-tabela"}\n```'
+        ),
+        'vendedor': (
+            'Para criar um vendedor, acesse **Usuários → Criar**. '
+            'Posso te mostrar o passo a passo!'
+            '\n```json\n{"type": "tour", "tour_name": "criar-vendedor"}\n```'
+        ),
+    }
+
+    def post(self, request, pk, format=None):
+        try:
+            conversation = Conversation.objects.get(pk=pk, user=request.user)
+        except Conversation.DoesNotExist:
+            return Response({'detail': 'Conversa não encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+
+        content = (request.data.get('content') or '').strip()
+        if not content:
+            return Response({'detail': 'Mensagem não pode ser vazia.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Salva mensagem do usuário
+        Message.objects.create(conversation=conversation, role='user', content=content)
+
+        # Gera resposta
+        reply = self._generate_reply(content)
+
+        # Salva resposta do assistente
+        Message.objects.create(conversation=conversation, role='assistant', content=reply)
+
+        return Response({'reply': reply, 'conversation_id': pk})
+
+    def _generate_reply(self, content: str) -> str:
+        """Fase 1: respostas determinísticas baseadas em palavras-chave."""
+        lower = content.lower()
+        for keyword, reply in self._SIMPLE_REPLIES.items():
+            if keyword in lower:
+                return reply
+        return (
+            'Posso te ajudar com: **criar equipes**, **sugestões de tabela**, '
+            '**importar CSV**, **configurar tabelas** e **criar vendedores**. '
+            'Sobre o que você gostaria de saber mais?'
+        )

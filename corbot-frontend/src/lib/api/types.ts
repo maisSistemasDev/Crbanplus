@@ -352,3 +352,35 @@ export interface PaginatedResponse<T> {
   previous: string | null;
   results: T[];
 }
+
+// ===== AI Agent =====
+export interface TableUpdateSuggestion {
+  id: number;
+  commission_group: number;
+  commission_group_name: string;
+  table: string;
+  table_name: string;
+  bank_name: string;
+  old_config: Record<string, unknown>[];
+  suggested_config: Record<string, unknown>[];
+  ai_reasoning: string;
+  status: 'pending' | 'accepted' | 'rejected';
+  created_at: string;
+  applied_at: string | null;
+  applied_by: number | null;
+}
+
+export interface AiMessage {
+  id: number;
+  role: 'user' | 'assistant';
+  content: string;
+  tool_calls: unknown | null;
+  created_at: string;
+}
+
+export interface AiConversation {
+  id: number;
+  created_at: string;
+  updated_at: string;
+  messages: AiMessage[];
+}

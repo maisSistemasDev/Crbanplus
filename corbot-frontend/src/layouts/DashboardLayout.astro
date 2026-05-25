@@ -1,6 +1,7 @@
 ---
 import BaseLayout from './BaseLayout.astro';
 import { TourListener } from '../components/react/tour/TourListener';
+import { ChatWidget } from '../components/react/ai/ChatWidget';
 interface Props {
   title?: string;
 }
@@ -10,4 +11,6 @@ const { title = 'CorbanPlus' } = Astro.props;
   <slot />
   <!-- Listener invisível: executa tours disparados pelo agente via pendingTour store -->
   <TourListener client:only="react" />
+  <!-- Assistente IA flutuante -->
+  <ChatWidget client:only="react" />
 </BaseLayout>

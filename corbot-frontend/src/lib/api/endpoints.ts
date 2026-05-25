@@ -127,4 +127,11 @@ export const ENDPOINTS = {
   API_KEY_DETAIL: (id: string) => `/api-keys/${id}/`,
   API_KEY_REVOKE: (id: string) => `/api-keys/${id}/revoke/`,
   API_KEY_AVAILABLE_SCOPES: '/api-keys/available-scopes/',
+
+  // AI Agent
+  AI_SUGGESTIONS: '/ai/suggestions/',
+  AI_SUGGESTION_ACCEPT: (id: number) => `/ai/suggestions/${id}/accept/`,
+  AI_SUGGESTION_REJECT: (id: number) => `/ai/suggestions/${id}/reject/`,
+  AI_CONVERSATIONS: '/ai/conversations/',
+  AI_CONVERSATION_DETAIL: (id: number) => `/ai/conversations/${id}/`,
 } as const;

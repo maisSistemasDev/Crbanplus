@@ -6,6 +6,7 @@ from .views import (
     TableSuggestionRejectView,
     ConversationListCreateView,
     ConversationDetailView,
+    ConversationMessageView,
 )
 
 urlpatterns = [
@@ -17,4 +18,5 @@ urlpatterns = [
     # Conversas com o agente
     path('ai/conversations/', ConversationListCreateView.as_view(), name='ai-conversation-list'),
     path('ai/conversations/<int:pk>/', ConversationDetailView.as_view(), name='ai-conversation-detail'),
+    path('ai/conversations/<int:pk>/message/', ConversationMessageView.as_view(), name='ai-conversation-message'),
 ]
