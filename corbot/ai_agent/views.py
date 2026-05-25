@@ -9,6 +9,7 @@ from bank.models import Table
 
 from .models import TableUpdateSuggestion, Conversation, Message
 from .serializers import TableUpdateSuggestionSerializer, ConversationSerializer, MessageSerializer
+from .llm import get_ai_reply
 
 
 class TableSuggestionListView(BaseApiView):
@@ -207,40 +208,14 @@ class ConversationDetailView(BaseApiView):
 
 class ConversationMessageView(BaseApiView):
     """
-    Recebe uma mensagem do usuário, salva no histórico e retorna uma resposta do agente.
-    Fase 1: resposta baseada em regras simples (sem LLM).
-    Fase 2: trocar _generate_reply por chamada ao PydanticAI.
+    Recebe uma mensagem do usuário e retorna a resposta do agente.
+
+    Response: { "reply": "<texto>", "tour_name": "<nome|null>", "conversation_id": <id> }
+
+    Fase 1 (sem chave AI): respostas por palavras-chave.
+    Fase 2 (com chave AI): chamada real ao OpenAI/Anthropic via llm.get_ai_reply().
     """
     permission_classes = [permissions.IsAuthenticated]
-
-    # Respostas simples para Fase 1 (sem LLM)
-    _SIMPLE_REPLIES = {
-        'grupo': (
-            'Para criar uma equipe de comissão, acesse o menu lateral **Equipes** '
-            'e clique em **Nova Equipe**. Vou te mostrar onde fica!'
-            '\n```json\n{"type": "tour", "tour_name": "criar-grupo-comissao"}\n```'
-        ),
-        'sugest': (
-            'As sugestões de atualização aparecem no topo da página de Equipes quando '
-            'uma tabela bancária é atualizada. Posso te guiar até lá!'
-            '\n```json\n{"type": "tour", "tour_name": "aceitar-sugestao-tabela"}\n```'
-        ),
-        'csv': (
-            'Você pode importar tabelas por CSV no menu **Tabelas**. '
-            'Posso te mostrar o processo!'
-            '\n```json\n{"type": "tour", "tour_name": "importar-csv"}\n```'
-        ),
-        'tabela': (
-            'As tabelas bancárias ficam em **Bancos → Tabelas**. '
-            'Quer que eu te guie até a configuração?'
-            '\n```json\n{"type": "tour", "tour_name": "configurar-tabela"}\n```'
-        ),
-        'vendedor': (
-            'Para criar um vendedor, acesse **Usuários → Criar**. '
-            'Posso te mostrar o passo a passo!'
-            '\n```json\n{"type": "tour", "tour_name": "criar-vendedor"}\n```'
-        ),
-    }
 
     def post(self, request, pk, format=None):
         try:
@@ -255,22 +230,21 @@ class ConversationMessageView(BaseApiView):
         # Salva mensagem do usuário
         Message.objects.create(conversation=conversation, role='user', content=content)
 
-        # Gera resposta
-        reply = self._generate_reply(content)
+        # Recupera histórico para o LLM (últimas 20 mensagens)
+        history = list(
+            Message.objects.filter(conversation=conversation)
+            .order_by('created_at')
+            .values('role', 'content')[:20]
+        )
+
+        # Gera resposta (LLM ou palavras-chave)
+        reply_text, tour_name = get_ai_reply(history)
 
         # Salva resposta do assistente
-        Message.objects.create(conversation=conversation, role='assistant', content=reply)
+        Message.objects.create(conversation=conversation, role='assistant', content=reply_text)
 
-        return Response({'reply': reply, 'conversation_id': pk})
-
-    def _generate_reply(self, content: str) -> str:
-        """Fase 1: respostas determinísticas baseadas em palavras-chave."""
-        lower = content.lower()
-        for keyword, reply in self._SIMPLE_REPLIES.items():
-            if keyword in lower:
-                return reply
-        return (
-            'Posso te ajudar com: **criar equipes**, **sugestões de tabela**, '
-            '**importar CSV**, **configurar tabelas** e **criar vendedores**. '
-            'Sobre o que você gostaria de saber mais?'
-        )
+        return Response({
+            'reply': reply_text,
+            'tour_name': tour_name,
+            'conversation_id': pk,
+        })

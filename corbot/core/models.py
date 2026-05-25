@@ -490,9 +490,33 @@ class SystemSettings(TimeStampedModel):
     """
     Configurações globais do sistema (singleton).
     """
+    PROVIDER_OPENAI = 'openai'
+    PROVIDER_ANTHROPIC = 'anthropic'
+    AI_PROVIDER_CHOICES = [
+        (PROVIDER_OPENAI, 'OpenAI (ChatGPT)'),
+        (PROVIDER_ANTHROPIC, 'Anthropic (Claude)'),
+    ]
+
     singleton = models.BooleanField(default=True, unique=True, editable=False)
     corbanpay_base_url = models.URLField(_('URL base CorbanPay'), blank=True, null=True)
     corbanpay_api_key = models.CharField(_('API key CorbanPay'), max_length=255, blank=True, null=True)
+
+    # Configurações do agente IA
+    ai_provider = models.CharField(
+        _('provedor de IA'),
+        max_length=20,
+        choices=AI_PROVIDER_CHOICES,
+        default=PROVIDER_OPENAI,
+    )
+    ai_api_key = models.CharField(_('API key do agente IA'), max_length=255, blank=True, null=True)
+    ai_model = models.CharField(
+        _('modelo de IA'),
+        max_length=100,
+        blank=True,
+        default='',
+        help_text='Deixe em branco para usar o padrão do provedor.',
+    )
+
     updated_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
@@ -521,6 +545,14 @@ class SystemSettings(TimeStampedModel):
         if len(self.corbanpay_api_key) <= 8:
             return '*' * len(self.corbanpay_api_key)
         return f"{self.corbanpay_api_key[:4]}{'*' * (len(self.corbanpay_api_key) - 8)}{self.corbanpay_api_key[-4:]}"
+
+    @property
+    def masked_ai_api_key(self):
+        if not self.ai_api_key:
+            return ''
+        if len(self.ai_api_key) <= 8:
+            return '*' * len(self.ai_api_key)
+        return f"{self.ai_api_key[:4]}{'*' * (len(self.ai_api_key) - 8)}{self.ai_api_key[-4:]}"
 
 
 class APIKey(TimeStampedModel):

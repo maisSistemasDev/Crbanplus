@@ -69,3 +69,53 @@ class CorbanPaySettingsView(BaseApiView):
         )
 
         return self.get(request)
+
+
+class AISettingsView(BaseApiView):
+    """
+    Configuração do agente IA (provedor + chave).
+    Apenas admin da promotora pode visualizar/editar.
+    Todos os usuários abaixo da promotora usarão esta chave automaticamente.
+    """
+    permission_classes = [permissions.IsAuthenticated, IsPromotoraAdmin]
+
+    def get(self, request):
+        s = SystemSettings.get_solo()
+        return Response({
+            'ai_provider': s.ai_provider,
+            'ai_model': s.ai_model or '',
+            'ai_api_key': s.masked_ai_api_key,
+            'ai_api_key_configured': bool(s.ai_api_key),
+            'updated_at': s.updated_at,
+        })
+
+    def patch(self, request):
+        s = SystemSettings.get_solo()
+
+        if 'ai_provider' in request.data:
+            provider = str(request.data['ai_provider']).strip()
+            valid = {c[0] for c in SystemSettings.AI_PROVIDER_CHOICES}
+            if provider not in valid:
+                return Response(
+                    {'detail': f'Provedor inválido. Opções: {", ".join(valid)}'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            s.ai_provider = provider
+
+        if 'ai_api_key' in request.data:
+            key = str(request.data['ai_api_key']).strip()
+            s.ai_api_key = key or None
+
+        if 'ai_model' in request.data:
+            s.ai_model = str(request.data['ai_model']).strip()
+
+        s.updated_by = request.user
+        s.save()
+
+        self.log_info(
+            request=request,
+            action='update_ai_settings',
+            message='Configurações do agente IA atualizadas',
+        )
+
+        return self.get(request)

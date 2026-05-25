@@ -5,6 +5,7 @@ export const ENDPOINTS = {
   CURRENT_USER: '/users/me/',
   PROFILE_SETTINGS: '/users/me/',
   CORBANPAY_CONFIG: '/config/corbanpay/',
+  AI_SETTINGS: '/config/ai/',
 
   // Setup
   SETUP_STATUS: '/setup/status/',

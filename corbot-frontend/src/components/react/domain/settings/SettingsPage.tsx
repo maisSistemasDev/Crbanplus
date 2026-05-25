@@ -15,6 +15,13 @@ interface CorbanPayConfigResponse {
   corbanpay_api_key_configured: boolean;
 }
 
+interface AIConfigResponse {
+  ai_provider: 'openai' | 'anthropic';
+  ai_model: string;
+  ai_api_key: string;
+  ai_api_key_configured: boolean;
+}
+
 interface ProfileForm {
   first_name: string;
   last_name: string;
@@ -70,6 +77,12 @@ export function SettingsPage() {
   const [corbanPayBaseUrl, setCorbanPayBaseUrl] = useState('');
   const [corbanPayApiKey, setCorbanPayApiKey] = useState('');
   const [corbanPayKeyConfigured, setCorbanPayKeyConfigured] = useState(false);
+  const [aiProvider, setAiProvider] = useState<'openai' | 'anthropic'>('openai');
+  const [aiModel, setAiModel] = useState('');
+  const [aiApiKey, setAiApiKey] = useState('');
+  const [aiKeyConfigured, setAiKeyConfigured] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiSaving, setAiSaving] = useState(false);
 
   const isPromotoraAdmin = useMemo(() => {
     return user?.role === 'admin' && !user?.company;
@@ -94,6 +107,17 @@ export function SettingsPage() {
         toast.error(extractErrorMessage(error));
       })
       .finally(() => setIntegrationLoading(false));
+
+    setAiLoading(true);
+    api.get<AIConfigResponse>(ENDPOINTS.AI_SETTINGS)
+      .then((data) => {
+        setAiProvider(data.ai_provider || 'openai');
+        setAiModel(data.ai_model || '');
+        setAiApiKey('');
+        setAiKeyConfigured(!!data.ai_api_key_configured);
+      })
+      .catch(() => { /* silencia se não disponível */ })
+      .finally(() => setAiLoading(false));
   }, [isPromotoraAdmin]);
 
   if (!profileForm || !user) {
@@ -163,6 +187,24 @@ export function SettingsPage() {
       toast.error(extractErrorMessage(error));
     } finally {
       setProfileSaving(false);
+    }
+  }
+
+  async function saveAiConfig() {
+    setAiSaving(true);
+    try {
+      const payload: Record<string, string> = { ai_provider: aiProvider, ai_model: aiModel };
+      if (aiApiKey.trim()) payload.ai_api_key = aiApiKey.trim();
+      const updated = await api.patch<AIConfigResponse>(ENDPOINTS.AI_SETTINGS, payload);
+      setAiProvider(updated.ai_provider);
+      setAiModel(updated.ai_model || '');
+      setAiApiKey('');
+      setAiKeyConfigured(!!updated.ai_api_key_configured);
+      toast.success('Configuração do agente IA salva.');
+    } catch (error) {
+      toast.error(extractErrorMessage(error));
+    } finally {
+      setAiSaving(false);
     }
   }
 
@@ -329,6 +371,73 @@ export function SettingsPage() {
 
             <Button onClick={saveCorbanPayConfig} loading={integrationSaving || integrationLoading}>
               Salvar configuracao CorbanPay
+            </Button>
+          </div>
+        )}
+
+        {isPromotoraAdmin && (
+          <div className="bg-white border border-gray-100 rounded-xl p-6 space-y-4">
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-8 rounded-lg bg-indigo-100 flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-indigo-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Agente IA</h2>
+                <p className="text-xs text-gray-500">Chave configurada aqui é usada por todos os usuários da promotora.</p>
+              </div>
+            </div>
+
+            <label className="space-y-1 block">
+              <span className="text-sm text-gray-600">Provedor</span>
+              <select
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                value={aiProvider}
+                onChange={(e) => setAiProvider(e.target.value as 'openai' | 'anthropic')}
+                disabled={aiLoading}
+              >
+                <option value="openai">OpenAI (ChatGPT)</option>
+                <option value="anthropic">Anthropic (Claude)</option>
+              </select>
+            </label>
+
+            <label className="space-y-1 block">
+              <span className="text-sm text-gray-600">Modelo</span>
+              <input
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                placeholder={aiProvider === 'openai' ? 'gpt-4o-mini (padrão)' : 'claude-3-haiku-20240307 (padrão)'}
+                value={aiModel}
+                onChange={(e) => setAiModel(e.target.value)}
+                disabled={aiLoading}
+              />
+              <span className="text-xs text-gray-400">Deixe em branco para usar o modelo padrão do provedor.</span>
+            </label>
+
+            <label className="space-y-1 block">
+              <span className="text-sm text-gray-600">API Key</span>
+              <input
+                type="password"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                placeholder={aiKeyConfigured ? 'Chave configurada. Digite apenas para substituir.' : 'sk-... ou anthropic key'}
+                value={aiApiKey}
+                onChange={(e) => setAiApiKey(e.target.value)}
+                disabled={aiLoading}
+                autoComplete="new-password"
+              />
+            </label>
+
+            {aiKeyConfigured && (
+              <div className="flex items-center gap-1.5 text-xs text-green-600">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                Chave configurada
+              </div>
+            )}
+
+            <p className="text-xs text-gray-400">
+              Sem chave configurada, o agente usa respostas por palavras-chave (modo offline).
+            </p>
+
+            <Button onClick={saveAiConfig} loading={aiSaving || aiLoading}>
+              Salvar configuração IA
             </Button>
           </div>
         )}

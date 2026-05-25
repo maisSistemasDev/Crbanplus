@@ -14,7 +14,7 @@ from .views import (
 from .views.views_import import VendedorImportView, VendedorTemplateView
 from .views.internal_users import InternalUserViewSet, PermissionTemplateViewSet
 from .views.api_keys import APIKeyViewSet
-from .views.config import whitelabel_config, CorbanPaySettingsView
+from .views.config import whitelabel_config, CorbanPaySettingsView, AISettingsView
 from .views.push import PushSubscriptionView
 from .views.import_job import ImportJobCreateView, ImportJobStatusView, ImportTemplateView
 
@@ -31,6 +31,7 @@ urlpatterns = [
     # Configurações de Whitelabel
     path('config/whitelabel/', whitelabel_config, name='whitelabel-config'),
     path('config/corbanpay/', CorbanPaySettingsView.as_view(), name='corbanpay-config'),
+    path('config/ai/', AISettingsView.as_view(), name='ai-config'),
     
     # Campos de formulário
     path('form-fields/users/', UserFormFieldsView.as_view(), name='user-form-fields'),

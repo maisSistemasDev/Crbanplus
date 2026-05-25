@@ -6,27 +6,6 @@ import { pendingTour } from '../../../lib/tour/store';
 import { TOURS } from '../../../lib/tour/tours';
 import type { AiConversation, AiMessage } from '../../../lib/api/types';
 
-interface ParsedResponse {
-  text?: string;
-  type?: 'tour' | 'highlight';
-  tour_name?: string;
-  steps?: unknown[];
-  element?: string;
-}
-
-function parseAssistantContent(content: string): ParsedResponse {
-  // Tenta extrair JSON embutido entre ```json ... ``` ou direto
-  try {
-    const match = content.match(/```json\s*([\s\S]*?)```/);
-    const raw = match ? match[1] : content.trim();
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object') return parsed as ParsedResponse;
-  } catch {
-    // não é JSON — conteúdo de texto normal
-  }
-  return { text: content };
-}
-
 function Message({ msg }: { msg: AiMessage }) {
   const isUser = msg.role === 'user';
   return (
@@ -37,13 +16,13 @@ function Message({ msg }: { msg: AiMessage }) {
         </div>
       )}
       <div
-        className={`max-w-[80%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
+        className={`max-w-[80%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${
           isUser
             ? 'bg-indigo-600 text-white rounded-tr-sm'
             : 'bg-gray-100 text-gray-800 rounded-tl-sm'
         }`}
       >
-        {isUser ? msg.content : (parseAssistantContent(msg.content).text ?? msg.content)}
+        {msg.content}
       </div>
     </div>
   );
@@ -89,27 +68,23 @@ export function ChatWidget() {
 
     try {
       const convId = await ensureConversation();
-      const res = await api.post<{ reply: string; conversation_id: number }>(
+      const res = await api.post<{ reply: string; tour_name: string | null; conversation_id: number }>(
         `${ENDPOINTS.AI_CONVERSATIONS}${convId}/message/`,
         { content: text },
       );
 
-      const reply = res.reply ?? '';
-      const parsed = parseAssistantContent(reply);
+      const replyText = res.reply ?? '';
 
-      // Dispara tour se a IA pediu
-      if (parsed.type === 'tour') {
-        if (parsed.tour_name && TOURS[parsed.tour_name]) {
-          pendingTour.set(TOURS[parsed.tour_name]);
-        } else if (Array.isArray(parsed.steps) && parsed.steps.length > 0) {
-          pendingTour.set(parsed.steps as Parameters<typeof pendingTour.set>[0]);
-        }
+      // Dispara tour se a IA sugeriu
+      if (res.tour_name) {
+        const steps = TOURS[res.tour_name];
+        if (steps) pendingTour.set(steps);
       }
 
       const assistantMsg: AiMessage = {
         id: Date.now() + 1,
         role: 'assistant',
-        content: parsed.text ?? reply,
+        content: replyText,
         tool_calls: null,
         created_at: new Date().toISOString(),
       };
