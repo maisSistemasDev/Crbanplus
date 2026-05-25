@@ -117,16 +117,22 @@ function getMenuItems(role: Role): MenuItem[] {
         { label: 'Saque CorbanPay', href: '/withdrawals/corbanpay' },
       ],
     },
-    { icon: <UsersRound size={iconSize} />, label: 'Equipes', href: '/commission-groups', tourId: 'sidebar-commission-groups' },: MenuItem[] = [
+    { icon: <UsersRound size={iconSize} />, label: 'Equipes', href: '/commission-groups', tourId: 'sidebar-commission-groups' },
+    { icon: <CreditCard size={iconSize} />, label: 'Pagamentos', href: '/payments' },
+    { icon: <Settings size={iconSize} />, label: 'Configuracoes', href: '/settings' },
+  ];
+
+  const gerente: MenuItem[] = [
     { icon: <LayoutDashboard size={iconSize} />, label: 'Dashboard', href: '/dashboard' },
     {
       icon: <Users size={iconSize} />,
       label: 'Usuarios',
       href: '/users',
+      tourId: 'sidebar-users',
       children: [
         { label: 'Vendedores', href: '/users/sellers' },
         { label: 'Lideres', href: '/users/leaders' },
-        { label: 'Importar CSV', href: '/users/import' },
+        { label: 'Importar CSV', href: '/users/import', tourId: 'import-csv-link' },
       ],
     },
     { icon: <Coins size={iconSize} />, label: 'Comissoes', href: '/commissions' },
