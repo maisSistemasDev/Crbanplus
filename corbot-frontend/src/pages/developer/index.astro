@@ -1,0 +1,7 @@
+---
+import DashboardLayout from '../../layouts/DashboardLayout.astro';
+import { DeveloperPageShell } from '../../components/react/domain/developer/DeveloperPage';
+---
+<DashboardLayout title="Área do Desenvolvedor">
+  <DeveloperPageShell client:only="react" />
+</DashboardLayout>

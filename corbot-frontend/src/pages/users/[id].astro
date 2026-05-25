@@ -1,0 +1,8 @@
+---
+import DashboardLayout from '../../layouts/DashboardLayout.astro';
+import { UserEditPage } from '../../components/react/domain/users/UserPages';
+const { id } = Astro.params;
+---
+<DashboardLayout title="Editar Usuario - CorbanPlus">
+  <UserEditPage userId={Number(id)} client:only="react" />
+</DashboardLayout>

@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #2980b9;
+            margin-top: 30px;
+        }
+        h3 {
+            color: #3498db;
+            margin-top: 20px;
+        }
+        .endpoint {
+            background-color: #f9f9f9;
+            border-left: 4px solid #3498db;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 0 4px 4px 0;
+        }
+        .method {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 4px;
+            color: white;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        .get { background-color: #27ae60; }
+        .post { background-color: #2980b9; }
+        .put { background-color: #f39c12; }
+        .delete { background-color: #c0392b; }
+        .patch { background-color: #8e44ad; }
+        
+        pre {
+            background-color: #f1f1f1;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        code {
+            font-family: Consolas, Monaco, 'Andale Mono', monospace;
+        }
+    </style>
+</head>
+<body>
+    <h1>{{ title }}</h1>
+    
+    {% for group in endpoints %}
+        <h2>{{ group.name }}</h2>
+        
+        {% for endpoint in group.endpoints %}
+            <div class="endpoint">
+                <h3>
+                    <span class="method {{ endpoint.method|lower }}">{{ endpoint.method }}</span>
+                    {{ endpoint.url }}
+                </h3>
+                <p>{{ endpoint.description }}</p>
+                
+                {% if endpoint.request_example %}
+                    <h4>Exemplo de Requisição:</h4>
+                    <pre><code>{{ endpoint.request_example|pprint }}</code></pre>
+                {% endif %}
+                
+                {% if endpoint.response_example %}
+                    <h4>Exemplo de Resposta:</h4>
+                    <pre><code>{{ endpoint.response_example|pprint }}</code></pre>
+                {% endif %}
+            </div>
+        {% endfor %}
+    {% endfor %}
+</body>
+</html> 

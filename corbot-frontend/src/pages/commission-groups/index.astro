@@ -1,0 +1,7 @@
+---
+import DashboardLayout from '../../layouts/DashboardLayout.astro';
+import { CommissionGroupListPage } from '../../components/react/domain/commission-groups/CommissionGroupPages';
+---
+<DashboardLayout title="Equipes - CorbanPlus">
+  <CommissionGroupListPage client:only="react" />
+</DashboardLayout>

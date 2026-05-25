@@ -1,0 +1,8 @@
+---
+import DashboardLayout from '../../layouts/DashboardLayout.astro';
+import { TeamBuilderPage } from '../../components/react/domain/commission-groups/CommissionGroupPages';
+const { id } = Astro.params;
+---
+<DashboardLayout title="Equipe - CorbanPlus">
+  <TeamBuilderPage groupId={Number(id)} client:only="react" />
+</DashboardLayout>

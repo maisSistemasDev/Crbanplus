@@ -1,0 +1,918 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+type Row = [string, string, string, string];
+
+interface Section { id: string; title: string; rows: Row[]; }
+
+const sections: Section[] = [
+  { id: 'ep-auth', title: 'Autenticação JWT', rows: [
+    ['POST', '/api/token/', 'Login — retorna access + refresh token', 'Público'],
+    ['POST', '/api/token/refresh/', 'Renova o access token', 'Público'],
+  ]},
+  { id: 'ep-users', title: 'Usuários', rows: [
+    ['GET', '/api/users/me/', 'Usuário autenticado atual', 'Autenticado'],
+    ['GET', '/api/users/', 'Listar usuários', 'Admin/Colaborador'],
+    ['POST', '/api/users/', 'Criar usuário', 'Admin/Colaborador'],
+    ['GET/PUT/DELETE', '/api/users/{id}/', 'Detalhe, atualizar ou remover usuário', 'Admin'],
+    ['GET', '/api/users/sellers/', 'Listar vendedores', 'Admin/Empresa Admin'],
+    ['GET', '/api/users/leaders/', 'Listar líderes', 'Admin/Empresa Admin'],
+    ['POST', '/api/users/leaders/', 'Criar líder', 'Admin/Empresa Admin'],
+    ['POST', '/api/users/managers/', 'Criar gerente', 'Admin'],
+    ['POST', '/api/users/{id}/change_leader/', 'Alterar líder do vendedor', 'Admin/Empresa Admin'],
+    ['POST', '/api/users/batch_change_leader/', 'Alteração em lote de líder', 'Admin'],
+    ['POST', '/api/users/import/sellers/', 'Importar vendedores via CSV', 'Admin'],
+    ['GET', '/api/users/import/sellers/template/', 'Download template CSV de vendedores', 'Admin'],
+  ]},
+  { id: 'ep-companies', title: 'Corbans (Empresas)', rows: [
+    ['GET', '/api/companies/', 'Listar corbans', 'Admin/Colaborador'],
+    ['POST', '/api/companies/', 'Criar corban', 'Admin'],
+    ['GET/PUT/DELETE', '/api/companies/{uuid}/', 'Detalhe, atualizar ou remover corban', 'Admin'],
+  ]},
+  { id: 'ep-banks', title: 'Bancos', rows: [
+    ['GET', '/api/banks/', 'Listar bancos', 'Autenticado'],
+    ['POST', '/api/banks/', 'Criar banco', 'Admin'],
+    ['GET/PUT/DELETE', '/api/banks/{uuid}/', 'Detalhe do banco', 'Admin'],
+  ]},
+  { id: 'ep-agreements', title: 'Convênios', rows: [
+    ['GET', '/api/agreements/', 'Listar convênios', 'Autenticado'],
+    ['POST', '/api/agreements/', 'Criar convênio', 'Admin'],
+    ['GET/PUT/DELETE', '/api/agreements/{uuid}/', 'Detalhe do convênio', 'Admin'],
+  ]},
+  { id: 'ep-tables', title: 'Tabelas de Comissão', rows: [
+    ['GET', '/api/tables/', 'Listar tabelas', 'Autenticado'],
+    ['POST', '/api/tables/', 'Criar tabela', 'Admin'],
+    ['GET/PUT/DELETE', '/api/tables/{uuid}/', 'Detalhe da tabela', 'Admin'],
+    ['DELETE', '/api/tables/bulk-delete/', 'Remover tabelas em lote', 'Admin'],
+    ['POST', '/api/tables/create-batch/', 'Importar tabelas via CSV', 'Admin'],
+    ['GET', '/api/tables/download-example/', 'Template CSV de tabelas', 'Admin'],
+    ['GET', '/api/tables/export-csv/', 'Exportar todas as tabelas (CSV)', 'Admin'],
+    ['GET', '/api/tables/export-csv/{bank_uuid}/', 'Exportar tabelas por banco (CSV)', 'Admin'],
+    ['GET', '/api/tables/by-bank/{bank_uuid}/', 'Listar tabelas por banco', 'Autenticado'],
+    ['GET', '/api/tables/{uuid}/history/', 'Histórico de alterações da tabela', 'Admin'],
+  ]},
+  { id: 'ep-bank-access', title: 'Acessos Bancários', rows: [
+    ['GET', '/api/bank-accesses/', 'Listar acessos bancários', 'Admin'],
+    ['POST', '/api/bank-accesses/', 'Criar acesso bancário', 'Admin'],
+    ['GET/PUT/DELETE', '/api/bank-accesses/{uuid}/', 'Detalhe do acesso', 'Admin'],
+    ['GET', '/api/access-logs/', 'Logs de acesso bancário', 'Admin'],
+  ]},
+  { id: 'ep-proposals', title: 'Propostas', rows: [
+    ['GET', '/api/proposals/', 'Listar propostas', 'Autenticado'],
+    ['POST', '/api/proposals/preview-rows/', 'Pré-visualizar CSV antes do upload', 'Admin'],
+    ['GET', '/api/proposals/layouts/', 'Listar layouts de importação', 'Admin'],
+    ['POST', '/api/proposals/layouts/', 'Criar layout de importação', 'Admin'],
+    ['GET/PUT/DELETE', '/api/proposals/layouts/{uuid}/', 'Detalhe do layout', 'Admin'],
+    ['GET', '/api/proposals/fields/', 'Campos mapeáveis nos layouts', 'Admin'],
+    ['GET', '/api/proposals/batch/', 'Listar lotes de propostas', 'Admin'],
+    ['POST', '/api/proposals/batch/', 'Criar novo lote (upload CSV + layout)', 'Admin'],
+    ['GET/PUT', '/api/proposals/batch/{uuid}/', 'Detalhe/status do lote', 'Admin'],
+    ['GET', '/api/proposals/batch/{uuid}/proposals/', 'Propostas de um lote', 'Admin'],
+    ['GET', '/api/proposals/status-payment/', 'Mapeamentos de status de pagamento por banco', 'Admin'],
+  ]},
+  { id: 'ep-commissions', title: 'Comissões', rows: [
+    ['GET', '/api/commissions/', 'Listar comissões', 'Autenticado'],
+    ['GET', '/api/commissions/{id}/', 'Detalhe de comissão', 'Autenticado'],
+    ['GET', '/api/commissions/mirror/', 'Espelho — visão consolidada do vendedor', 'Vendedor/Líder'],
+    ['GET', '/api/commissions/balance/', 'Saldo disponível do usuário', 'Autenticado'],
+    ['POST', '/api/commissions/release/', 'Liberar comissões para pagamento', 'Admin'],
+    ['GET', '/api/commissions/export/', 'Exportar comissões (CSV)', 'Admin'],
+    ['POST', '/api/commissions/update-status/', 'Atualizar status em lote', 'Admin'],
+  ]},
+  { id: 'ep-commission-groups', title: 'Grupos de Comissão', rows: [
+    ['GET', '/api/commission-groups/', 'Listar grupos de comissão', 'Admin/Empresa Admin'],
+    ['POST', '/api/commission-groups/', 'Criar grupo de comissão', 'Admin'],
+    ['GET/PUT/DELETE', '/api/commission-groups/{id}/', 'Detalhe do grupo', 'Admin'],
+    ['GET/POST', '/api/commission-groups/{id}/members/', 'Membros do grupo', 'Admin'],
+    ['POST', '/api/commission-groups/{id}/import-csv/', 'Importar membros via CSV', 'Admin'],
+    ['GET', '/api/commission-groups/max-rates/', 'Taxas máximas configuradas', 'Admin'],
+    ['GET', '/api/commission-groups/by-company/', 'Grupos da promotora por empresa', 'Admin'],
+    ['POST', '/api/commission-groups/by-company/', 'Criar grupo da promotora', 'Admin'],
+    ['GET/PUT/DELETE', '/api/commission-groups/by-company/{id}/', 'Detalhe do grupo da promotora', 'Admin'],
+  ]},
+  { id: 'ep-payments', title: 'Pagamentos & Saques', rows: [
+    ['GET', '/api/payments/', 'Listar pagamentos', 'Admin'],
+    ['POST', '/api/payments/generate-comissions/', 'Gerar comissões a partir das propostas', 'Admin'],
+    ['GET', '/api/withdrawals/', 'Listar saques solicitados', 'Autenticado'],
+    ['POST', '/api/withdrawals/corbanpay/', 'Solicitar saque via CorbanPay', 'Autenticado'],
+  ]},
+  { id: 'ep-internal-users', title: 'Usuários Internos (Promotora)', rows: [
+    ['GET', '/api/internal-users/', 'Listar colaboradores da promotora', 'Admin'],
+    ['POST', '/api/internal-users/', 'Criar colaborador da promotora', 'Admin'],
+    ['GET/PUT/DELETE', '/api/internal-users/{id}/', 'Detalhe do colaborador', 'Admin'],
+    ['GET/POST', '/api/internal-users/{id}/permissions/', 'Permissões do colaborador', 'Admin'],
+    ['GET', '/api/internal-users/available-permissions/', 'Lista de permissões disponíveis', 'Admin'],
+    ['GET', '/api/permission-templates/', 'Listar templates de permissão', 'Admin'],
+    ['POST', '/api/permission-templates/', 'Criar template de permissão', 'Admin'],
+    ['POST', '/api/permission-templates/{id}/apply-to-user/', 'Aplicar template a colaborador', 'Admin'],
+  ]},
+  { id: 'ep-api-keys', title: 'Chaves de API', rows: [
+    ['GET', '/api/api-keys/', 'Listar chaves de API', 'Admin Promotora'],
+    ['POST', '/api/api-keys/', 'Criar chave (full_key exibida uma vez)', 'Admin Promotora'],
+    ['GET', '/api/api-keys/{uuid}/', 'Detalhe da chave', 'Admin Promotora'],
+    ['PATCH', '/api/api-keys/{uuid}/', 'Atualizar nome/escopos/validade', 'Admin Promotora'],
+    ['DELETE', '/api/api-keys/{uuid}/', 'Remover chave permanentemente', 'Admin Promotora'],
+    ['POST', '/api/api-keys/{uuid}/revoke/', 'Revogar (desativar) chave', 'Admin Promotora'],
+    ['GET', '/api/api-keys/available-scopes/', 'Listar escopos disponíveis', 'Admin Promotora'],
+  ]},
+];
+
+const methodColor: Record<string, string> = {
+  GET: 'bg-blue-900 text-blue-300',
+  POST: 'bg-green-900 text-green-300',
+  PUT: 'bg-yellow-900 text-yellow-300',
+  PATCH: 'bg-orange-900 text-orange-300',
+  DELETE: 'bg-red-900 text-red-300',
+};
+
+function getMethodClass(method: string): string {
+  const base = method.split('/')[0];
+  return methodColor[base] ?? 'bg-gray-700 text-gray-300';
+}
+---
+
+<BaseLayout title="Documentação da API - CorbanPlus">
+  <div class="min-h-screen bg-gray-950 text-gray-200" style="font-family: Inter, sans-serif;">
+
+    <header class="sticky top-0 z-40 bg-gray-900 border-b border-gray-800 px-6 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <span class="text-xl font-bold text-white">CorbanPlus</span>
+        <span class="text-xs bg-blue-600 text-white px-2 py-0.5 rounded-full font-medium">API v1</span>
+      </div>
+      <a href="/developer" class="text-sm text-blue-400 hover:text-blue-300">&#8592; Área do Desenvolvedor</a>
+    </header>
+
+    <div class="flex">
+      <nav class="hidden lg:block w-64 shrink-0 sticky top-[53px] h-[calc(100vh-53px)] overflow-y-auto border-r border-gray-800 bg-gray-900 p-5">
+        <ul class="space-y-0.5 text-sm">
+          <li class="text-xs font-semibold text-gray-500 uppercase tracking-wider py-2">Introdução</li>
+          <li><a href="#visao-geral" class="doc-link">Visão Geral</a></li>
+          <li><a href="#autenticacao" class="doc-link">Autenticação</a></li>
+          <li><a href="#erros" class="doc-link">Erros &amp; Respostas</a></li>
+          <li><a href="#paginacao" class="doc-link">Paginação</a></li>
+          <li class="text-xs font-semibold text-gray-500 uppercase tracking-wider py-2 mt-4">Fluxos</li>
+          <li><a href="#fluxo-usuarios" class="doc-link">Criação de Usuários</a></li>
+          <li><a href="#fluxo-propostas" class="doc-link">Propostas</a></li>
+          <li><a href="#fluxo-comissoes" class="doc-link">Comissões &amp; Pagamentos</a></li>
+          <li class="text-xs font-semibold text-gray-500 uppercase tracking-wider py-2 mt-4">Endpoints</li>
+          {sections.map(s => (
+            <li><a href={`#${s.id}`} class="doc-link">{s.title}</a></li>
+          ))}
+          <li class="text-xs font-semibold text-gray-500 uppercase tracking-wider py-2 mt-4">Payloads</li>
+          <li><a href="#payload-auth" class="doc-link">Autenticação</a></li>
+          <li><a href="#payload-users" class="doc-link">Usuários</a></li>
+          <li><a href="#payload-companies" class="doc-link">Corbans</a></li>
+          <li><a href="#payload-tables" class="doc-link">Tabelas</a></li>
+          <li><a href="#payload-proposals" class="doc-link">Propostas</a></li>
+          <li><a href="#payload-commissions" class="doc-link">Comissões</a></li>
+          <li><a href="#payload-groups" class="doc-link">Grupos de Comissão</a></li>
+          <li><a href="#payload-payments" class="doc-link">Pagamentos</a></li>
+          <li><a href="#payload-apikeys" class="doc-link">Chaves de API</a></li>
+          <li class="text-xs font-semibold text-gray-500 uppercase tracking-wider py-2 mt-4">Referência</li>
+          <li><a href="#roles" class="doc-link">Papéis &amp; Permissões</a></li>
+          <li><a href="#scopes" class="doc-link">Escopos API Key</a></li>
+        </ul>
+      </nav>
+
+      <main class="flex-1 max-w-4xl px-6 lg:px-10 py-10 space-y-16">
+
+        <section id="visao-geral">
+          <h1 class="text-3xl font-bold text-white mb-3">Documentação da API</h1>
+          <p class="text-gray-400 leading-relaxed">
+            A API do <strong class="text-white">CorbanPlus</strong> é uma REST API para integração com a plataforma de gestão
+            de comissões e propostas. Todos os endpoints retornam JSON e exigem autenticação.
+          </p>
+          <div class="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div class="bg-gray-800 rounded-xl p-4 border border-gray-700">
+              <p class="text-xs text-gray-500 mb-1">Base URL</p>
+              <code class="text-green-400 text-sm">https://api.seudominio.com.br/api</code>
+            </div>
+            <div class="bg-gray-800 rounded-xl p-4 border border-gray-700">
+              <p class="text-xs text-gray-500 mb-1">Formato</p>
+              <code class="text-green-400 text-sm">Content-Type: application/json</code>
+            </div>
+          </div>
+        </section>
+
+        <section id="autenticacao">
+          <h2 class="section-title">Autenticação</h2>
+          <div class="space-y-5">
+            <div class="endpoint-card">
+              <h3 class="text-white font-semibold mb-2">1. JWT &mdash; Login com CPF e Senha</h3>
+              <p class="text-gray-400 text-sm mb-3">O identificador é o <strong class="text-white">CPF</strong>. Access token expira em <strong class="text-white">30 minutos</strong>; refresh em <strong class="text-white">1 dia</strong>.</p>
+              <div class="code-block">
+                <p><span class="text-cyan-400">POST</span> <span class="text-white">/api/token/</span></p>
+                <pre class="text-green-400 text-xs mt-2 whitespace-pre">&#123;
+  "cpf": "12345678901",
+  "password": "minha_senha"
+&#125;</pre>
+                <p class="text-gray-500 text-xs mt-3">Use o access token em todas as requisições:</p>
+                <p class="mt-1"><span class="text-yellow-400">Authorization</span>: <span class="text-green-400">Bearer &lt;access_token&gt;</span></p>
+              </div>
+            </div>
+            <div class="endpoint-card">
+              <h3 class="text-white font-semibold mb-2">2. Api-Key &mdash; Integração Server-to-Server</h3>
+              <p class="text-gray-400 text-sm mb-3">Crie uma chave na <a href="/developer" class="text-blue-400 hover:underline">Área do Desenvolvedor</a>. O valor completo é exibido <strong class="text-white">uma única vez</strong>.</p>
+              <div class="code-block">
+                <p><span class="text-yellow-400">Authorization</span>: <span class="text-green-400">Api-Key crb_sua_chave_completa</span></p>
+              </div>
+              <div class="mt-3 bg-amber-900/30 border border-amber-700 rounded-lg p-3 text-sm text-amber-300">
+                &#9888;&#65039; Cada chave possui <strong>escopos</strong>. Requests fora do escopo retornam <code class="text-red-400">403</code>.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="erros">
+          <h2 class="section-title">Erros &amp; Respostas</h2>
+          <table class="w-full text-sm border-collapse">
+            <thead><tr class="border-b border-gray-700">
+              <th class="text-left py-2 pr-4 text-gray-400 font-medium">Código</th>
+              <th class="text-left py-2 pr-4 text-gray-400 font-medium">Significado</th>
+              <th class="text-left py-2 text-gray-400 font-medium">Campo de erro</th>
+            </tr></thead>
+            <tbody class="divide-y divide-gray-800">
+              <tr><td class="py-2 pr-4"><code class="text-green-400">200/201</code></td><td class="py-2 pr-4 text-gray-300">Sucesso</td><td class="py-2 text-gray-500">&mdash;</td></tr>
+              <tr><td class="py-2 pr-4"><code class="text-orange-400">400</code></td><td class="py-2 pr-4 text-gray-300">Dados inválidos</td><td class="py-2"><code class="text-gray-400 text-xs">&#123;"campo": ["mensagem"]&#125;</code></td></tr>
+              <tr><td class="py-2 pr-4"><code class="text-orange-400">401</code></td><td class="py-2 pr-4 text-gray-300">Não autenticado</td><td class="py-2"><code class="text-gray-400 text-xs">&#123;"detail": "..."&#125;</code></td></tr>
+              <tr><td class="py-2 pr-4"><code class="text-orange-400">403</code></td><td class="py-2 pr-4 text-gray-300">Sem permissão</td><td class="py-2"><code class="text-gray-400 text-xs">&#123;"detail": "..."&#125;</code></td></tr>
+              <tr><td class="py-2 pr-4"><code class="text-orange-400">404</code></td><td class="py-2 pr-4 text-gray-300">Não encontrado</td><td class="py-2"><code class="text-gray-400 text-xs">&#123;"detail": "Not found."&#125;</code></td></tr>
+              <tr><td class="py-2 pr-4"><code class="text-red-400">500</code></td><td class="py-2 pr-4 text-gray-300">Erro interno</td><td class="py-2"><code class="text-gray-400 text-xs">&#123;"detail": "..."&#125;</code></td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section id="paginacao">
+          <h2 class="section-title">Paginação</h2>
+          <p class="text-gray-400 mb-3">Listagens são paginadas (10 itens/página). Use <code class="text-green-400">?page=N</code>.</p>
+          <div class="code-block">
+            <pre class="text-green-400 text-xs whitespace-pre">&#123;
+  "count": 42,
+  "next": "/api/users/?page=3",
+  "previous": "/api/users/?page=1",
+  "results": [...]
+&#125;</pre>
+          </div>
+        </section>
+
+        <section id="fluxo-usuarios">
+          <h2 class="section-title">Fluxo: Criação de Usuários</h2>
+          <p class="text-gray-400 mb-4">O sistema tem dois universos: <strong class="text-white">Promotora</strong> (usuários internos) e <strong class="text-white">Corbans</strong> (empresas parceiras).</p>
+          <div class="space-y-3">
+            <div class="flow-step"><span class="step-badge">1</span><div>
+              <p class="text-white font-medium">Criar o Corban</p>
+              <code class="text-blue-400 text-xs">POST /api/companies/</code>
+              <p class="text-gray-400 text-sm mt-0.5">Registre a empresa com CNPJ, cores de whitelabel e dados de contato.</p>
+            </div></div>
+            <div class="flow-step"><span class="step-badge">2</span><div>
+              <p class="text-white font-medium">Criar o Administrador do Corban</p>
+              <code class="text-blue-400 text-xs">POST /api/users/</code>
+              <p class="text-gray-400 text-sm mt-0.5">Envie <code class="text-yellow-400">role: "empresa_admin"</code> e <code class="text-yellow-400">company: "uuid"</code>.</p>
+            </div></div>
+            <div class="flow-step"><span class="step-badge">3</span><div>
+              <p class="text-white font-medium">Criar Gerentes e Líderes</p>
+              <code class="text-blue-400 text-xs">POST /api/users/managers/ | POST /api/users/leaders/</code>
+              <p class="text-gray-400 text-sm mt-0.5">Líderes recebem comissão de liderança sobre seus vendedores.</p>
+            </div></div>
+            <div class="flow-step"><span class="step-badge">4</span><div>
+              <p class="text-white font-medium">Criar Vendedores (individual ou lote)</p>
+              <code class="text-blue-400 text-xs">POST /api/users/ | POST /api/users/import/sellers/</code>
+              <p class="text-gray-400 text-sm mt-0.5">Baixe o template: <code class="text-blue-400 text-xs">GET /api/users/import/sellers/template/</code></p>
+            </div></div>
+            <div class="flow-step"><span class="step-badge">5</span><div>
+              <p class="text-white font-medium">Vincular vendedor a líder</p>
+              <code class="text-blue-400 text-xs">POST /api/users/{"{id}"}/change_leader/</code>
+            </div></div>
+          </div>
+          <div class="mt-5 bg-gray-800 rounded-xl p-4 border border-gray-700">
+            <p class="text-xs text-gray-500 mb-3 font-semibold uppercase">Papéis disponíveis (campo <code>role</code>)</p>
+            <div class="grid grid-cols-2 gap-2 text-xs">
+              <div><code class="text-yellow-400">admin</code> <span class="text-gray-400">&mdash; Promotora, acesso total</span></div>
+              <div><code class="text-yellow-400">colaborador</code> <span class="text-gray-400">&mdash; Promotora, permissões granulares</span></div>
+              <div><code class="text-yellow-400">empresa_admin</code> <span class="text-gray-400">&mdash; Corban, administrador</span></div>
+              <div><code class="text-yellow-400">gerente</code> <span class="text-gray-400">&mdash; Corban, gerente</span></div>
+              <div><code class="text-yellow-400">lider</code> <span class="text-gray-400">&mdash; Corban, líder de equipe</span></div>
+              <div><code class="text-yellow-400">vendedor</code> <span class="text-gray-400">&mdash; Corban, padrão</span></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="fluxo-propostas">
+          <h2 class="section-title">Fluxo: Propostas</h2>
+          <p class="text-gray-400 mb-4">Propostas são importadas em lote via CSV. O processamento é assíncrono via Celery.</p>
+          <div class="space-y-3">
+            <div class="flow-step"><span class="step-badge">1</span><div>
+              <p class="text-white font-medium">Configurar Layout do banco</p>
+              <code class="text-blue-400 text-xs">POST /api/proposals/layouts/</code>
+              <p class="text-gray-400 text-sm mt-0.5">Define o mapeamento das colunas do CSV para campos internos.</p>
+            </div></div>
+            <div class="flow-step"><span class="step-badge">2</span><div>
+              <p class="text-white font-medium">Pré-visualizar CSV (opcional)</p>
+              <code class="text-blue-400 text-xs">POST /api/proposals/preview-rows/</code>
+            </div></div>
+            <div class="flow-step"><span class="step-badge">3</span><div>
+              <p class="text-white font-medium">Criar lote de propostas</p>
+              <code class="text-blue-400 text-xs">POST /api/proposals/batch/</code>
+              <p class="text-gray-400 text-sm mt-0.5">Envia CSV + layout. Retorna <code>task_id</code> para acompanhar o processamento.</p>
+            </div></div>
+            <div class="flow-step"><span class="step-badge">4</span><div>
+              <p class="text-white font-medium">Acompanhar processamento</p>
+              <code class="text-blue-400 text-xs">GET /api/proposals/batch/{"{uuid}"}/</code>
+              <p class="text-gray-400 text-sm mt-0.5">Status: pending / processing / done / error</p>
+            </div></div>
+          </div>
+        </section>
+
+        <section id="fluxo-comissoes">
+          <h2 class="section-title">Fluxo: Comissões &amp; Pagamentos</h2>
+          <div class="space-y-3">
+            <div class="flow-step"><span class="step-badge">1</span><div>
+              <p class="text-white font-medium">Configurar Grupos de Comissão</p>
+              <code class="text-blue-400 text-xs">POST /api/commission-groups/</code>
+              <p class="text-gray-400 text-sm mt-0.5">Define taxas por banco/tabela/faixa para vendedores e líderes.</p>
+            </div></div>
+            <div class="flow-step"><span class="step-badge">2</span><div>
+              <p class="text-white font-medium">Configurar tetos da Promotora</p>
+              <code class="text-blue-400 text-xs">POST /api/commission-groups/by-company/</code>
+            </div></div>
+            <div class="flow-step"><span class="step-badge">3</span><div>
+              <p class="text-white font-medium">Gerar comissões</p>
+              <code class="text-blue-400 text-xs">POST /api/payments/generate-comissions/</code>
+            </div></div>
+            <div class="flow-step"><span class="step-badge">4</span><div>
+              <p class="text-white font-medium">Liberar e pagar</p>
+              <code class="text-blue-400 text-xs">POST /api/commissions/release/ | GET /api/payments/</code>
+            </div></div>
+          </div>
+        </section>
+
+        <!-- Dynamic endpoint sections -->
+        {sections.map((section) => (
+          <section id={section.id}>
+            <h2 class="section-title">{section.title}</h2>
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm border-collapse">
+                <thead>
+                  <tr class="border-b border-gray-700">
+                    <th class="text-left py-2 pr-3 text-gray-400 font-medium w-28">Método</th>
+                    <th class="text-left py-2 pr-3 text-gray-400 font-medium">Endpoint</th>
+                    <th class="text-left py-2 pr-3 text-gray-400 font-medium">Descrição</th>
+                    <th class="text-left py-2 text-gray-400 font-medium">Acesso</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-800">
+                  {section.rows.map((row) => (
+                    <tr>
+                      <td class="py-2 pr-3">
+                        <span class={`text-xs font-mono px-1.5 py-0.5 rounded ${getMethodClass(row[0])}`}>{row[0]}</span>
+                      </td>
+                      <td class="py-2 pr-3"><code class="text-blue-400 text-xs">{row[1]}</code></td>
+                      <td class="py-2 pr-3 text-gray-300 text-xs">{row[2]}</td>
+                      <td class="py-2 text-gray-500 text-xs">{row[3]}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ))}
+
+        <section id="roles">
+          <h2 class="section-title">Papéis &amp; Permissões</h2>
+          <table class="w-full text-sm border-collapse">
+            <thead><tr class="border-b border-gray-700">
+              <th class="text-left py-2 pr-4 text-gray-400 font-medium">Role</th>
+              <th class="text-left py-2 pr-4 text-gray-400 font-medium">Contexto</th>
+              <th class="text-left py-2 text-gray-400 font-medium">Descrição</th>
+            </tr></thead>
+            <tbody class="divide-y divide-gray-800">
+              <tr><td class="py-2 pr-4"><code class="text-yellow-400">admin</code></td><td class="py-2 pr-4 text-gray-400">Promotora</td><td class="py-2 text-gray-300">Acesso total. Sem empresa vinculada.</td></tr>
+              <tr><td class="py-2 pr-4"><code class="text-yellow-400">colaborador</code></td><td class="py-2 pr-4 text-gray-400">Promotora</td><td class="py-2 text-gray-300">Permissões granulares via UserPermission ou templates.</td></tr>
+              <tr><td class="py-2 pr-4"><code class="text-yellow-400">empresa_admin</code></td><td class="py-2 pr-4 text-gray-400">Corban</td><td class="py-2 text-gray-300">Admin da empresa parceira.</td></tr>
+              <tr><td class="py-2 pr-4"><code class="text-yellow-400">gerente</code></td><td class="py-2 pr-4 text-gray-400">Corban</td><td class="py-2 text-gray-300">Gerencia líderes e equipes.</td></tr>
+              <tr><td class="py-2 pr-4"><code class="text-yellow-400">lider</code></td><td class="py-2 pr-4 text-gray-400">Corban</td><td class="py-2 text-gray-300">Lidera vendedores. Recebe comissão de liderança.</td></tr>
+              <tr><td class="py-2 pr-4"><code class="text-yellow-400">vendedor</code></td><td class="py-2 pr-4 text-gray-400">Corban</td><td class="py-2 text-gray-300">Perfil padrão. Vinculado a líder e equipe.</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section id="scopes">
+          <h2 class="section-title">Escopos das Chaves de API</h2>
+          <p class="text-gray-400 mb-4">
+            <code class="text-green-400">:read</code> permite apenas GET.
+            <code class="text-green-400">:write</code> permite POST/PUT/PATCH/DELETE.
+          </p>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {([
+              ['Usuários', 'users:read | users:write'],
+              ['Corbans', 'companies:read | companies:write'],
+              ['Bancos', 'banks:read | banks:write'],
+              ['Tabelas', 'tables:read | tables:write'],
+              ['Convênios', 'agreements:read | agreements:write'],
+              ['Propostas', 'proposals:read | proposals:write'],
+              ['Comissões', 'commissions:read | commissions:write'],
+              ['Pagamentos', 'payments:read | payments:write'],
+              ['Acessos Bancários', 'bank_access:read | bank_access:write'],
+            ] as [string, string][]).map(([label, scope]) => (
+              <div class="bg-gray-800 rounded-lg px-4 py-3 border border-gray-700">
+                <p class="text-xs font-semibold text-gray-300 mb-1">{label}</p>
+                <code class="text-green-400 text-xs">{scope}</code>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <!-- ═══════════════════════════════════════════════════════════
+             REFERÊNCIA DE PAYLOADS
+        ════════════════════════════════════════════════════════════ -->
+
+        <section id="payload-auth">
+          <h2 class="section-title">Payloads — Autenticação</h2>
+          <div class="space-y-6">
+            <div class="payload-card">
+              <div class="payload-header">
+                <span class="method-badge bg-green-900 text-green-300">POST</span>
+                <code class="text-blue-400">/api/token/</code>
+                <span class="payload-tag">Login</span>
+              </div>
+              <div class="payload-grid">
+                <div>
+                  <p class="payload-label">Request</p>
+                  <pre class="code-block text-xs whitespace-pre">{"{\n  \"cpf\": \"12345678901\",\n  \"password\": \"minha_senha\"\n}"}</pre>
+                </div>
+                <div>
+                  <p class="payload-label">Response 200</p>
+                  <pre class="code-block text-xs whitespace-pre">{"{\n  \"access\": \"eyJhbGciOiJIUzI1...\",\n  \"refresh\": \"eyJhbGciOiJIUzI1...\"\n}"}</pre>
+                </div>
+              </div>
+            </div>
+            <div class="payload-card">
+              <div class="payload-header">
+                <span class="method-badge bg-green-900 text-green-300">POST</span>
+                <code class="text-blue-400">/api/token/refresh/</code>
+                <span class="payload-tag">Renovar token</span>
+              </div>
+              <div class="payload-grid">
+                <div>
+                  <p class="payload-label">Request</p>
+                  <pre class="code-block text-xs whitespace-pre">{"{\n  \"refresh\": \"eyJhbGciOiJIUzI1...\"\n}"}</pre>
+                </div>
+                <div>
+                  <p class="payload-label">Response 200</p>
+                  <pre class="code-block text-xs whitespace-pre">{"{\n  \"access\": \"eyJhbGciOiJIUzI1...\"\n}"}</pre>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="payload-users">
+          <h2 class="section-title">Payloads — Usuários</h2>
+          <div class="space-y-6">
+            <div class="payload-card">
+              <div class="payload-header">
+                <span class="method-badge bg-green-900 text-green-300">POST</span>
+                <code class="text-blue-400">/api/users/</code>
+                <span class="payload-tag">Criar usuário</span>
+              </div>
+              <div class="payload-grid">
+                <div>
+                  <p class="payload-label">Request</p>
+                  <pre class="code-block text-xs whitespace-pre">{"{\n  \"cpf\": \"12345678901\",\n  \"email\": \"joao@email.com\",\n  \"first_name\": \"João\",\n  \"last_name\": \"Silva\",\n  \"password\": \"senha123\",\n  \"role\": \"vendedor\",\n  \"company\": \"uuid-da-empresa\",\n  \"leader\": null,\n  \"matricula\": \"MAT001\",\n  \"is_active\": true\n}"}</pre>
+                </div>
+                <div>
+                  <p class="payload-label">Response 201</p>
+                  <pre class="code-block text-xs whitespace-pre">{"{\n  \"id\": 42,\n  \"cpf\": \"12345678901\",\n  \"email\": \"joao@email.com\",\n  \"first_name\": \"João\",\n  \"last_name\": \"Silva\",\n  \"role\": \"vendedor\",\n  \"company\": \"uuid-da-empresa\",\n  \"company_name\": \"Corban Exemplo\",\n  \"leader\": null,\n  \"is_active\": true\n}"}</pre>
+                </div>
+              </div>
+            </div>
+            <div class="payload-card">
+              <div class="payload-header">
+                <span class="method-badge bg-green-900 text-green-300">POST</span>
+                <code class="text-blue-400">/api/users/{"{id}"}/change_leader/</code>
+                <span class="payload-tag">Alterar líder</span>
+              </div>
+              <div class="payload-grid">
+                <div>
+                  <p class="payload-label">Request</p>
+                  <pre class="code-block text-xs whitespace-pre">{"{\n  \"leader_id\": 15\n}"}</pre>
+                </div>
+                <div>
+                  <p class="payload-label">Response 200</p>
+                  <pre class="code-block text-xs whitespace-pre">{"{\n  \"detail\": \"Líder atualizado com sucesso.\"\n}"}</pre>
+                </div>
+              </div>
+            </div>
+            <div class="payload-card">
+              <div class="payload-header">
+                <span class="method-badge bg-green-900 text-green-300">POST</span>
+                <code class="text-blue-400">/api/users/batch_change_leader/</code>
+                <span class="payload-tag">Alteração em lote de líder</span>
+              </div>
+              <div class="payload-grid">
+                <div>
+                  <p class="payload-label">Request</p>
+                  <pre class="code-block text-xs whitespace-pre">{"{\n  \"seller_ids\": [1, 2, 3],\n  \"leader_id\": 15\n}"}</pre>
+                </div>
+                <div>
+                  <p class="payload-label">Response 200</p>
+                  <pre class="code-block text-xs whitespace-pre">{"{\n  \"updated\": 3,\n  \"detail\": \"Líderes atualizados.\"\n}"}</pre>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="payload-companies">
+          <h2 class="section-title">Payloads — Corbans (Empresas)</h2>
+          <div class="space-y-6">
+            <div class="payload-card">
+              <div class="payload-header">
+                <span class="method-badge bg-green-900 text-green-300">POST</span>
+                <code class="text-blue-400">/api/companies/</code>
+                <span class="payload-tag">Criar corban</span>
+              </div>
+              <div class="payload-grid">
+                <div>
+                  <p class="payload-label">Request</p>
+                  <pre class="code-block text-xs whitespace-pre">{"{\n  \"name\": \"Corban Exemplo Ltda\",\n  \"trading_name\": \"Corban Exemplo\",\n  \"person_type\": \"PJ\",\n  \"document\": \"12345678000195\",\n  \"email\": \"contato@corban.com\",\n  \"phone\": \"11999990000\",\n  \"primary_color\": \"#1a56db\",\n  \"secondary_color\": \"#e3eafe\",\n  \"accent_color\": \"#f59e0b\",\n  \"city\": \"São Paulo\",\n  \"state\": \"SP\",\n  \"is_active\": true\n}"}</pre>
+                </div>
+                <div>
+                  <p class="payload-label">Response 201</p>
+                  <pre class="code-block text-xs whitespace-pre">{"{\n  \"id\": \"uuid-da-empresa\",\n  \"name\": \"Corban Exemplo Ltda\",\n  \"trading_name\": \"Corban Exemplo\",\n  \"person_type\": \"PJ\",\n  \"document\": \"12345678000195\",\n  \"primary_color\": \"#1a56db\",\n  \"is_active\": true\n}"}</pre>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="payload-tables">
+          <h2 class="section-title">Payloads — Tabelas de Comissão</h2>
+          <div class="space-y-6">
+            <div class="payload-card">
+              <div class="payload-header">
+                <span class="method-badge bg-green-900 text-green-300">POST</span>
+                <code class="text-blue-400">/api/tables/</code>
+                <span class="payload-tag">Criar tabela</span>
+              </div>
+              <div class="payload-grid">
+                <div>
+                  <p class="payload-label">Request</p>
+                  <pre class="code-block text-xs whitespace-pre">{"{\n  \"name_in_bank\": \"INSS - Novo\",\n  \"bank\": \"uuid-do-banco\",\n  \"agreement\": \"uuid-do-convenio\",\n  \"rate\": \"3.50\",\n  \"is_active\": true\n}"}</pre>
+                </div>
+                <div>
+                  <p class="payload-label">Response 201</p>
+                  <pre class="code-block text-xs whitespace-pre">{"{\n  \"id\": \"uuid-da-tabela\",\n  \"name_in_bank\": \"INSS - Novo\",\n  \"bank\": \"uuid-do-banco\",\n  \"agreement\": \"uuid-do-convenio\",\n  \"rate\": \"3.50\",\n  \"is_active\": true\n}"}</pre>
+                </div>
+              </div>
+            </div>
+            <div class="payload-card">
+              <div class="payload-header">
+                <span class="method-badge bg-green-900 text-green-300">POST</span>
+                <code class="text-blue-400">/api/tables/create-batch/</code>
+                <span class="payload-tag">Importar CSV</span>
+              </div>
+              <div class="bg-gray-900 border border-gray-700 rounded-lg p-4 text-xs font-mono space-y-1">
+                <p class="text-gray-400"># Content-Type: multipart/form-data</p>
+                <p><span class="text-yellow-400">file</span><span class="text-gray-400">: </span><span class="text-green-300">tabelas.csv</span></p>
+                <p><span class="text-yellow-400">bank</span><span class="text-gray-400">: </span><span class="text-green-300">uuid-do-banco</span></p>
+              </div>
+              <div class="mt-3 bg-gray-800 rounded-lg p-3 border border-gray-700">
+                <p class="text-xs text-gray-500 mb-2 font-semibold">Formato do CSV:</p>
+                <pre class="text-xs text-green-400 whitespace-pre">name_in_bank,agreement,rate
+INSS - Padrão,uuid-convenio-1,3.50
+SIAPE - Especial,uuid-convenio-2,4.00</pre>
+              </div>
+            </div>
+            <div class="payload-card">
+              <div class="payload-header">
+                <span class="method-badge bg-red-900 text-red-300">DELETE</span>
+                <code class="text-blue-400">/api/tables/bulk-delete/</code>
+                <span class="payload-tag">Remover em lote</span>
+              </div>
+              <div class="payload-grid">
+                <div>
+                  <p class="payload-label">Request</p>
+                  <pre class="code-block text-xs whitespace-pre">{"{\n  \"ids\": [\n    \"uuid-tabela-1\",\n    \"uuid-tabela-2\"\n  ]\n}"}</pre>
+                </div>
+                <div>
+                  <p class="payload-label">Response 200</p>
+                  <pre class="code-block text-xs whitespace-pre">{"{\n  \"deleted\": 2\n}"}</pre>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="payload-proposals">
+          <h2 class="section-title">Payloads — Propostas</h2>
+          <div class="space-y-6">
+            <div class="payload-card">
+              <div class="payload-header">
+                <span class="method-badge bg-green-900 text-green-300">POST</span>
+                <code class="text-blue-400">/api/proposals/layouts/</code>
+                <span class="payload-tag">Criar layout de importação</span>
+              </div>
+              <div class="payload-grid">
+                <div>
+                  <p class="payload-label">Request</p>
+                  <pre class="code-block text-xs whitespace-pre">{"{\n  \"name\": \"Layout BMG Folha\",\n  \"bank\": \"uuid-do-banco\",\n  \"fields\": [\n    {\n      \"column_name\": \"CPF_CLIENTE\",\n      \"field_name\": \"cpf\",\n      \"order\": 0\n    },\n    {\n      \"column_name\": \"VALOR_BRUTO\",\n      \"field_name\": \"gross_value\",\n      \"order\": 1\n    },\n    {\n      \"column_name\": \"TABELA\",\n      \"field_name\": \"table\",\n      \"order\": 2\n    }\n  ]\n}"}</pre>
+                </div>
+                <div>
+                  <p class="payload-label">Campos mapeáveis (GET /api/proposals/fields/)</p>
+                  <pre class="code-block text-xs whitespace-pre">{"[\n  \"cpf\", \"gross_value\", \"net_value\",\n  \"table\", \"agreement\", \"seller_cpf\",\n  \"proposal_number\", \"status\",\n  \"contract_date\", \"competence\"\n]"}</pre>
+                </div>
+              </div>
+            </div>
+            <div class="payload-card">
+              <div class="payload-header">
+                <span class="method-badge bg-green-900 text-green-300">POST</span>
+                <code class="text-blue-400">/api/proposals/batch/</code>
+                <span class="payload-tag">Criar lote (upload CSV)</span>
+              </div>
+              <div class="bg-gray-900 border border-gray-700 rounded-lg p-4 text-xs font-mono space-y-1">
+                <p class="text-gray-400"># Content-Type: multipart/form-data</p>
+                <p><span class="text-yellow-400">file</span><span class="text-gray-400">: </span><span class="text-green-300">propostas_maio.csv</span></p>
+                <p><span class="text-yellow-400">layout</span><span class="text-gray-400">: </span><span class="text-green-300">uuid-do-layout</span></p>
+                <p><span class="text-yellow-400">competence</span><span class="text-gray-400">: </span><span class="text-green-300">2025-05</span></p>
+              </div>
+              <div class="payload-grid mt-4">
+                <div>
+                  <p class="payload-label">Response 201</p>
+                  <pre class="code-block text-xs whitespace-pre">{"{\n  \"id\": \"uuid-do-lote\",\n  \"status\": \"pending\",\n  \"task_id\": \"celery-task-uuid\",\n  \"total_rows\": 0,\n  \"processed_rows\": 0,\n  \"error_rows\": 0,\n  \"competence\": \"2025-05\"\n}"}</pre>
+                </div>
+                <div>
+                  <p class="payload-label">GET /api/proposals/batch/{"{uuid}"}/ — Polling</p>
+                  <pre class="code-block text-xs whitespace-pre">{"{\n  \"id\": \"uuid-do-lote\",\n  \"status\": \"done\",\n  \"total_rows\": 450,\n  \"processed_rows\": 448,\n  \"error_rows\": 2,\n  \"competence\": \"2025-05\"\n}"}</pre>
+                </div>
+              </div>
+              <div class="mt-3 bg-amber-900/30 border border-amber-700 rounded-lg p-3 text-xs text-amber-300">
+                Status: <code>pending</code> &rarr; <code>processing</code> &rarr; <code>done</code> | <code>error</code>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="payload-commissions">
+          <h2 class="section-title">Payloads — Comissões</h2>
+          <div class="space-y-6">
+            <div class="payload-card">
+              <div class="payload-header">
+                <span class="method-badge bg-green-900 text-green-300">POST</span>
+                <code class="text-blue-400">/api/commissions/release/</code>
+                <span class="payload-tag">Liberar para pagamento</span>
+              </div>
+              <div class="payload-grid">
+                <div>
+                  <p class="payload-label">Request</p>
+                  <pre class="code-block text-xs whitespace-pre">{"{\n  \"commission_ids\": [101, 102, 103]\n}"}</pre>
+                </div>
+                <div>
+                  <p class="payload-label">Response 200</p>
+                  <pre class="code-block text-xs whitespace-pre">{"{\n  \"released\": 3,\n  \"detail\": \"Comissões liberadas.\"\n}"}</pre>
+                </div>
+              </div>
+            </div>
+            <div class="payload-card">
+              <div class="payload-header">
+                <span class="method-badge bg-green-900 text-green-300">POST</span>
+                <code class="text-blue-400">/api/commissions/update-status/</code>
+                <span class="payload-tag">Atualizar status em lote</span>
+              </div>
+              <div class="payload-grid">
+                <div>
+                  <p class="payload-label">Request</p>
+                  <pre class="code-block text-xs whitespace-pre">{"{\n  \"commission_ids\": [101, 102],\n  \"status\": \"paid\"\n}"}</pre>
+                </div>
+                <div>
+                  <p class="payload-label">Response 200</p>
+                  <pre class="code-block text-xs whitespace-pre">{"{\n  \"updated\": 2\n}"}</pre>
+                </div>
+              </div>
+              <div class="mt-3 bg-gray-800 rounded-lg p-3 border border-gray-700 text-xs">
+                <p class="text-gray-400 mb-1">Status possíveis:</p>
+                <div class="flex gap-3 flex-wrap">
+                  <code class="text-yellow-400">pending</code>
+                  <code class="text-yellow-400">released</code>
+                  <code class="text-green-400">paid</code>
+                  <code class="text-red-400">cancelled</code>
+                </div>
+              </div>
+            </div>
+            <div class="payload-card">
+              <div class="payload-header">
+                <span class="method-badge bg-blue-900 text-blue-300">GET</span>
+                <code class="text-blue-400">/api/commissions/balance/</code>
+                <span class="payload-tag">Saldo disponível</span>
+              </div>
+              <div>
+                <p class="payload-label">Response 200</p>
+                <pre class="code-block text-xs whitespace-pre">{"{\n  \"available\": \"1250.00\",\n  \"pending\": \"320.50\",\n  \"paid\": \"8740.00\"\n}"}</pre>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="payload-groups">
+          <h2 class="section-title">Payloads — Grupos de Comissão</h2>
+          <div class="space-y-6">
+            <div class="payload-card">
+              <div class="payload-header">
+                <span class="method-badge bg-green-900 text-green-300">POST</span>
+                <code class="text-blue-400">/api/commission-groups/</code>
+                <span class="payload-tag">Criar grupo</span>
+              </div>
+              <div class="payload-grid">
+                <div>
+                  <p class="payload-label">Request</p>
+                  <pre class="code-block text-xs whitespace-pre">{"{\n  \"name\": \"Grupo Padrão BMG\",\n  \"description\": \"Comissões padrão BMG\",\n  \"company\": \"uuid-da-empresa\",\n  \"color\": \"#3b82f6\",\n  \"is_active\": true,\n  \"by_leader\": false\n}"}</pre>
+                </div>
+                <div>
+                  <p class="payload-label">Response 201</p>
+                  <pre class="code-block text-xs whitespace-pre">{"{\n  \"id\": 7,\n  \"name\": \"Grupo Padrão BMG\",\n  \"company\": \"uuid-da-empresa\",\n  \"color\": \"#3b82f6\",\n  \"is_active\": true,\n  \"sellers\": [],\n  \"leaders\": [],\n  \"commission_rules\": [],\n  \"promotora_rules\": []\n}"}</pre>
+                </div>
+              </div>
+            </div>
+            <div class="payload-card">
+              <div class="payload-header">
+                <span class="method-badge bg-green-900 text-green-300">POST</span>
+                <code class="text-blue-400">/api/commission-groups/{"{id}"}/members/</code>
+                <span class="payload-tag">Adicionar membros</span>
+              </div>
+              <div class="payload-grid">
+                <div>
+                  <p class="payload-label">Request</p>
+                  <pre class="code-block text-xs whitespace-pre">{"{\n  \"sellers\": [1, 2, 3],\n  \"leaders\": [10]\n}"}</pre>
+                </div>
+                <div>
+                  <p class="payload-label">Response 200</p>
+                  <pre class="code-block text-xs whitespace-pre">{"{\n  \"sellers_count\": 3,\n  \"leaders_count\": 1\n}"}</pre>
+                </div>
+              </div>
+            </div>
+            <div class="payload-card">
+              <div class="payload-header">
+                <span class="method-badge bg-green-900 text-green-300">POST</span>
+                <code class="text-blue-400">/api/commission-groups/by-company/</code>
+                <span class="payload-tag">Grupo da Promotora (tetos)</span>
+              </div>
+              <div class="payload-grid">
+                <div>
+                  <p class="payload-label">Request</p>
+                  <pre class="code-block text-xs whitespace-pre">{"{\n  \"name\": \"Teto Promotora 2025\",\n  \"description\": \"Limite máximo de repasse\",\n  \"color\": \"#f59e0b\",\n  \"commission_rules\": [\n    {\n      \"bank\": \"uuid-do-banco\",\n      \"table\": \"uuid-da-tabela\",\n      \"commission_range\": \"0-50000\",\n      \"commission_rate\": \"2.50\"\n    }\n  ]\n}"}</pre>
+                </div>
+                <div>
+                  <p class="payload-label">Response 201</p>
+                  <pre class="code-block text-xs whitespace-pre">{"{\n  \"id\": 3,\n  \"name\": \"Teto Promotora 2025\",\n  \"color\": \"#f59e0b\",\n  \"is_active\": true,\n  \"commission_rules\": [...],\n  \"companies\": []\n}"}</pre>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="payload-payments">
+          <h2 class="section-title">Payloads — Pagamentos &amp; Saques</h2>
+          <div class="space-y-6">
+            <div class="payload-card">
+              <div class="payload-header">
+                <span class="method-badge bg-green-900 text-green-300">POST</span>
+                <code class="text-blue-400">/api/payments/generate-comissions/</code>
+                <span class="payload-tag">Gerar comissões</span>
+              </div>
+              <div class="payload-grid">
+                <div>
+                  <p class="payload-label">Request</p>
+                  <pre class="code-block text-xs whitespace-pre">{"{\n  \"batch_id\": \"uuid-do-lote\",\n  \"competence\": \"2025-05\"\n}"}</pre>
+                </div>
+                <div>
+                  <p class="payload-label">Response 200</p>
+                  <pre class="code-block text-xs whitespace-pre">{"{\n  \"generated\": 448,\n  \"total_amount\": \"125430.00\",\n  \"competence\": \"2025-05\"\n}"}</pre>
+                </div>
+              </div>
+            </div>
+            <div class="payload-card">
+              <div class="payload-header">
+                <span class="method-badge bg-green-900 text-green-300">POST</span>
+                <code class="text-blue-400">/api/withdrawals/corbanpay/</code>
+                <span class="payload-tag">Solicitar saque via PIX</span>
+              </div>
+              <div class="payload-grid">
+                <div>
+                  <p class="payload-label">Request</p>
+                  <pre class="code-block text-xs whitespace-pre">{"{\n  \"amount\": \"500.00\",\n  \"pix_key\": \"12345678901\",\n  \"pix_type\": \"cpf\",\n  \"description\": \"Saque comissões maio/2025\"\n}"}</pre>
+                </div>
+                <div>
+                  <p class="payload-label">Response 201</p>
+                  <pre class="code-block text-xs whitespace-pre">{"{\n  \"id\": \"uuid-do-saque\",\n  \"amount\": \"500.00\",\n  \"status\": \"pending\",\n  \"pix_key\": \"12345678901\",\n  \"pix_type\": \"cpf\",\n  \"created_at\": \"2025-05-06T10:00:00Z\"\n}"}</pre>
+                </div>
+              </div>
+              <div class="mt-3 bg-gray-800 rounded-lg p-3 border border-gray-700 text-xs">
+                <p class="text-gray-400 mb-1">Tipos de PIX (<code>pix_type</code>):</p>
+                <div class="flex flex-wrap gap-3">
+                  <code class="text-yellow-400">cpf</code>
+                  <code class="text-yellow-400">cnpj</code>
+                  <code class="text-yellow-400">email</code>
+                  <code class="text-yellow-400">phone</code>
+                  <code class="text-yellow-400">random</code>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="payload-apikeys">
+          <h2 class="section-title">Payloads — Chaves de API</h2>
+          <div class="space-y-6">
+            <div class="payload-card">
+              <div class="payload-header">
+                <span class="method-badge bg-green-900 text-green-300">POST</span>
+                <code class="text-blue-400">/api/api-keys/</code>
+                <span class="payload-tag">Criar chave</span>
+              </div>
+              <div class="payload-grid">
+                <div>
+                  <p class="payload-label">Request</p>
+                  <pre class="code-block text-xs whitespace-pre">{"{\n  \"name\": \"Integração ERP\",\n  \"scopes\": [\n    \"users:read\",\n    \"proposals:read\",\n    \"commissions:read\"\n  ],\n  \"expires_at\": \"2026-12-31T23:59:59Z\"\n}"}</pre>
+                </div>
+                <div>
+                  <p class="payload-label">Response 201 — chave exibida UMA VEZ</p>
+                  <pre class="code-block text-xs whitespace-pre">{"{\n  \"id\": \"uuid-da-chave\",\n  \"name\": \"Integração ERP\",\n  \"prefix\": \"crb_abc123\",\n  \"full_key\": \"crb_abc123xyz...segredo\",\n  \"scopes\": [\"users:read\", \"proposals:read\",\n             \"commissions:read\"],\n  \"is_active\": true,\n  \"expires_at\": \"2026-12-31T23:59:59Z\",\n  \"created_at\": \"2025-05-06T10:00:00Z\"\n}"}</pre>
+                </div>
+              </div>
+              <div class="mt-3 bg-red-900/30 border border-red-700 rounded-lg p-3 text-xs text-red-300">
+                &#9888;&#65039; O campo <code>full_key</code> é retornado <strong>apenas nesta resposta</strong>. Guarde-o imediatamente.
+              </div>
+            </div>
+            <div class="payload-card">
+              <div class="payload-header">
+                <span class="method-badge bg-orange-900 text-orange-300">PATCH</span>
+                <code class="text-blue-400">/api/api-keys/{"{uuid}"}/</code>
+                <span class="payload-tag">Atualizar chave</span>
+              </div>
+              <div class="payload-grid">
+                <div>
+                  <p class="payload-label">Request</p>
+                  <pre class="code-block text-xs whitespace-pre">{"{\n  \"name\": \"Integração ERP v2\",\n  \"scopes\": [\n    \"users:read\",\n    \"commissions:read\",\n    \"commissions:write\"\n  ]\n}"}</pre>
+                </div>
+                <div>
+                  <p class="payload-label">Response 200</p>
+                  <pre class="code-block text-xs whitespace-pre">{"{\n  \"id\": \"uuid-da-chave\",\n  \"name\": \"Integração ERP v2\",\n  \"prefix\": \"crb_abc123\",\n  \"scopes\": [\"users:read\", \"commissions:read\",\n             \"commissions:write\"],\n  \"is_active\": true\n}"}</pre>
+                </div>
+              </div>
+            </div>
+            <div class="payload-card">
+              <div class="payload-header">
+                <span class="method-badge bg-green-900 text-green-300">POST</span>
+                <code class="text-blue-400">/api/api-keys/{"{uuid}"}/revoke/</code>
+                <span class="payload-tag">Revogar chave</span>
+              </div>
+              <div class="payload-grid">
+                <div>
+                  <p class="payload-label">Request (sem body)</p>
+                  <pre class="code-block text-xs whitespace-pre">{"{}"}</pre>
+                </div>
+                <div>
+                  <p class="payload-label">Response 200</p>
+                  <pre class="code-block text-xs whitespace-pre">{"{\n  \"detail\": \"Chave revogada com sucesso.\",\n  \"id\": \"uuid-da-chave\",\n  \"is_active\": false\n}"}</pre>
+                </div>
+              </div>
+            </div>
+            <div class="payload-card">
+              <div class="payload-header">
+                <span class="method-badge bg-blue-900 text-blue-300">GET</span>
+                <code class="text-blue-400">/api/api-keys/available-scopes/</code>
+                <span class="payload-tag">Listar escopos disponíveis</span>
+              </div>
+              <div>
+                <p class="payload-label">Response 200</p>
+                <pre class="code-block text-xs whitespace-pre">{"[\n  { \"value\": \"users:read\",        \"label\": \"Usuários — Leitura\" },\n  { \"value\": \"users:write\",       \"label\": \"Usuários — Escrita\" },\n  { \"value\": \"companies:read\",    \"label\": \"Corbans — Leitura\" },\n  { \"value\": \"companies:write\",   \"label\": \"Corbans — Escrita\" },\n  { \"value\": \"proposals:read\",    \"label\": \"Propostas — Leitura\" },\n  { \"value\": \"proposals:write\",   \"label\": \"Propostas — Escrita\" },\n  { \"value\": \"commissions:read\",  \"label\": \"Comissões — Leitura\" },\n  { \"value\": \"commissions:write\", \"label\": \"Comissões — Escrita\" },\n  { \"value\": \"payments:read\",     \"label\": \"Pagamentos — Leitura\" },\n  { \"value\": \"payments:write\",    \"label\": \"Pagamentos — Escrita\" },\n  { \"value\": \"tables:read\",       \"label\": \"Tabelas — Leitura\" },\n  { \"value\": \"tables:write\",      \"label\": \"Tabelas — Escrita\" },\n  { \"value\": \"banks:read\",        \"label\": \"Bancos — Leitura\" },\n  { \"value\": \"bank_access:read\",  \"label\": \"Acessos — Leitura\" },\n  { \"value\": \"bank_access:write\", \"label\": \"Acessos — Escrita\" }\n]"}</pre>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <footer class="border-t border-gray-800 pt-8 pb-4 text-center text-gray-600 text-xs">
+          CorbanPlus API v1 &mdash; Documentação interna.
+        </footer>
+
+      </main>
+    </div>
+  </div>
+</BaseLayout>
+
+<style>
+  .doc-link { display:block; padding:6px 10px; border-radius:6px; color:rgb(156 163 175); font-size:13px; transition:all 0.15s; text-decoration:none; }
+  .doc-link:hover { background:rgb(31 41 55); color:rgb(209 213 219); }
+  .section-title { font-size:1.5rem; font-weight:700; color:white; padding-bottom:.75rem; border-bottom:1px solid rgb(55 65 81); margin-bottom:1.25rem; }
+  .endpoint-card { background:rgb(31 41 55); border:1px solid rgb(55 65 81); border-radius:12px; padding:16px; }
+  .code-block { background:rgb(17 24 39); border:1px solid rgb(55 65 81); border-radius:8px; padding:14px 16px; font-family:monospace; font-size:13px; overflow-x:auto; }
+  .flow-step { display:flex; gap:14px; align-items:flex-start; padding:12px; background:rgb(31 41 55); border:1px solid rgb(55 65 81); border-radius:10px; }
+  .step-badge { width:26px; height:26px; border-radius:50%; background:#3b82f6; color:white; font-size:12px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:2px; }
+  .payload-card { background:rgb(31 41 55); border:1px solid rgb(55 65 81); border-radius:12px; padding:18px; }
+  .payload-header { display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap; }
+  .method-badge { font-size:11px; font-weight:700; font-family:monospace; padding:2px 8px; border-radius:4px; }
+  .payload-tag { font-size:12px; color:rgb(156 163 175); }
+  .payload-label { font-size:11px; color:rgb(107 114 128); text-transform:uppercase; letter-spacing:.05em; font-weight:600; margin-bottom:6px; }
+  .payload-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  @media (max-width: 640px) { .payload-grid { grid-template-columns:1fr; } }
+</style>

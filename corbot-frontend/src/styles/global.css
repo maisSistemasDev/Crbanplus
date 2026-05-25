@@ -1,0 +1,101 @@
+@import 'tailwindcss';
+
+/* ===== Safe area utilities for PWA (notch / home indicator) ===== */
+.safe-area-top    { padding-top: env(safe-area-inset-top, 0px); }
+.safe-area-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+
+/* ===== CSS Custom Properties for Dynamic Company Theming ===== */
+:root {
+  --color-primary: #3498db;
+  --color-secondary: #2c3e50;
+  --color-accent: #e74c3c;
+
+  --color-primary-light: color-mix(in srgb, var(--color-primary) 80%, white);
+  --color-primary-dark: color-mix(in srgb, var(--color-primary) 80%, black);
+  --color-primary-bg: color-mix(in srgb, var(--color-primary) 10%, white);
+  --color-secondary-light: color-mix(in srgb, var(--color-secondary) 80%, white);
+  --color-secondary-dark: color-mix(in srgb, var(--color-secondary) 80%, black);
+  --color-accent-light: color-mix(in srgb, var(--color-accent) 80%, white);
+
+  --color-sidebar-bg: var(--color-secondary);
+  --color-sidebar-text: #ffffff;
+  --color-sidebar-hover: var(--color-secondary-light);
+  --color-sidebar-active: var(--color-primary);
+  --color-header-bg: #ffffff;
+  --color-header-border: #e5e7eb;
+  --color-body-bg: #f3f4f6;
+  --color-card-bg: #ffffff;
+  --color-text: #1f2937;
+  --color-text-muted: #6b7280;
+  --color-border: #d1d5db;
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+  --color-info: var(--color-primary);
+
+  --sidebar-width: 260px;
+  --sidebar-collapsed-width: 64px;
+  --header-height: 56px;
+
+  --font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  --transition-fast: 150ms ease;
+  --transition-normal: 250ms ease;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: var(--font-family);
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  background: var(--color-body-bg);
+  min-height: 100vh;
+}
+
+@theme {
+  --color-primary: var(--color-primary);
+  --color-primary-light: var(--color-primary-light);
+  --color-primary-dark: var(--color-primary-dark);
+  --color-primary-bg: var(--color-primary-bg);
+  --color-secondary: var(--color-secondary);
+  --color-secondary-light: var(--color-secondary-light);
+  --color-secondary-dark: var(--color-secondary-dark);
+  --color-accent: var(--color-accent);
+  --color-accent-light: var(--color-accent-light);
+  --color-sidebar-bg: var(--color-sidebar-bg);
+  --color-sidebar-text: var(--color-sidebar-text);
+  --color-sidebar-hover: var(--color-sidebar-hover);
+  --color-sidebar-active: var(--color-sidebar-active);
+  --color-body-bg: var(--color-body-bg);
+  --color-card-bg: var(--color-card-bg);
+  --color-success: var(--color-success);
+  --color-warning: var(--color-warning);
+  --color-error: var(--color-error);
+  --color-info: var(--color-info);
+  --color-border: var(--color-border);
+  --color-text-muted: var(--color-text-muted);
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}

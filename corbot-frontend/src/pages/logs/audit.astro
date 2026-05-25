@@ -1,0 +1,7 @@
+---
+import DashboardLayout from '../../layouts/DashboardLayout.astro';
+import { AuditLogPage } from '../../components/react/domain/logs/LogPages';
+---
+<DashboardLayout title="Logs de Auditoria - CorbanPlus">
+  <AuditLogPage client:only="react" />
+</DashboardLayout>

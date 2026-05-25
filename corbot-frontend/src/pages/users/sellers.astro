@@ -1,0 +1,7 @@
+---
+import DashboardLayout from '../../layouts/DashboardLayout.astro';
+import { UserSellersPage } from '../../components/react/domain/users/UserPages';
+---
+<DashboardLayout title="Vendedores - CorbanPlus">
+  <UserSellersPage client:only="react" />
+</DashboardLayout>

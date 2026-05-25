@@ -1,0 +1,7 @@
+---
+import DashboardLayout from '../../layouts/DashboardLayout.astro';
+import { ProposalListPage } from '../../components/react/domain/proposals/ProposalListPage';
+---
+<DashboardLayout title="Propostas - CorbanPlus">
+  <ProposalListPage client:only="react" />
+</DashboardLayout>

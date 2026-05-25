@@ -1,0 +1,7 @@
+---
+import DashboardLayout from '../../layouts/DashboardLayout.astro';
+import { BankAccessListPage } from '../../components/react/domain/bank-access/BankAccessPages';
+---
+<DashboardLayout title="Acessos - CorbanPlus">
+  <BankAccessListPage client:only="react" />
+</DashboardLayout>

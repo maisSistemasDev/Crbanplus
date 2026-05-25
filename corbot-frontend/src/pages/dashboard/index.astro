@@ -1,0 +1,7 @@
+---
+import DashboardLayout from '../../layouts/DashboardLayout.astro';
+import { DashboardPage } from '../../components/react/domain/dashboard/DashboardPages';
+---
+<DashboardLayout title="Dashboard - CorbanPlus">
+  <DashboardPage client:only="react" />
+</DashboardLayout>

@@ -1,0 +1,7 @@
+---
+import DashboardLayout from '../../layouts/DashboardLayout.astro';
+import { CompanyListPage } from '../../components/react/domain/companies/CompanyPages';
+---
+<DashboardLayout title="Corbans - CorbanPlus">
+  <CompanyListPage client:only="react" />
+</DashboardLayout>

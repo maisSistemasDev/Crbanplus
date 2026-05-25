@@ -1,0 +1,8 @@
+---
+import DashboardLayout from '../../../layouts/DashboardLayout.astro';
+import { CompanyGroupDetailPage } from '../../../components/react/domain/commission-groups/CommissionGroupPages';
+const { id } = Astro.params;
+---
+<DashboardLayout title="Equipe por Empresa - CorbanPlus">
+  <CompanyGroupDetailPage groupId={Number(id)} client:only="react" />
+</DashboardLayout>

@@ -1,0 +1,7 @@
+---
+import DashboardLayout from '../../../layouts/DashboardLayout.astro';
+import { LayoutCreatePage } from '../../../components/react/domain/proposals/ProposalPages';
+---
+<DashboardLayout title="Novo Layout - CorbanPlus">
+  <LayoutCreatePage client:only="react" />
+</DashboardLayout>

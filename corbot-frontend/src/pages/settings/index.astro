@@ -1,0 +1,7 @@
+---
+import DashboardLayout from '../../layouts/DashboardLayout.astro';
+import { SettingsPage } from '../../components/react/domain/settings/SettingsPage';
+---
+<DashboardLayout title="Configuracoes - CorbanPlus">
+  <SettingsPage client:only="react" />
+</DashboardLayout>

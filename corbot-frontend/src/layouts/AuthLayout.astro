@@ -1,0 +1,12 @@
+---
+import BaseLayout from './BaseLayout.astro';
+interface Props {
+  title?: string;
+}
+const { title = 'CorbanPlus - Login' } = Astro.props;
+---
+<BaseLayout title={title}>
+  <div class="flex min-h-screen items-center justify-center bg-[var(--color-body-bg)]">
+    <slot />
+  </div>
+</BaseLayout>

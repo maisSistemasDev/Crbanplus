@@ -1,0 +1,232 @@
+[
+    {
+        "nome": "Banco do Brasil S.A.",
+        "codigo": "001",
+        "ativo": true
+    },
+    {
+        "nome": "Banco Central do Brasil",
+        "codigo": "002", 
+        "ativo": true
+    },
+    {
+        "nome": "Banco da Amazônia S.A.",
+        "codigo": "003",
+        "ativo": true
+    },
+    {
+        "nome": "Banco do Nordeste do Brasil S.A.",
+        "codigo": "004",
+        "ativo": true
+    },
+    {
+        "nome": "Banco Nacional de Desenvolvimento Econômico e Social",
+        "codigo": "007",
+        "ativo": true
+    },
+    {
+        "nome": "Banco Meridional do Brasil",
+        "codigo": "008",
+        "ativo": true
+    },
+    {
+        "nome": "Banco Regional de Brasília S.A.",
+        "codigo": "070",
+        "ativo": true
+    },
+    {
+        "nome": "Banco de Brasília S.A.",
+        "codigo": "070",
+        "ativo": true
+    },
+    {
+        "nome": "Banco Inter S.A.",
+        "codigo": "077",
+        "ativo": true
+    },
+    {
+        "nome": "Banco do Estado de Sergipe S.A.",
+        "codigo": "047",
+        "ativo": true
+    },
+    {
+        "nome": "Banco Cooperativo Sicredi S.A.",
+        "codigo": "748",
+        "ativo": true
+    },
+    {
+        "nome": "Banco Cooperativo do Brasil S.A.",
+        "codigo": "756",
+        "ativo": true
+    },
+    {
+        "nome": "Banco Original S.A.",
+        "codigo": "212",
+        "ativo": true
+    },
+    {
+        "nome": "Banco Pan S.A.",
+        "codigo": "623",
+        "ativo": true
+    },
+    {
+        "nome": "Banco Itaú S.A.",
+        "codigo": "341",
+        "ativo": true
+    },
+    {
+        "nome": "Banco Bradesco S.A.",
+        "codigo": "237",
+        "ativo": true
+    },
+    {
+        "nome": "Banco Santander (Brasil) S.A.",
+        "codigo": "033",
+        "ativo": true
+    },
+    {
+        "nome": "Caixa Econômica Federal",
+        "codigo": "104",
+        "ativo": true
+    },
+    {
+        "nome": "Banco Safra S.A.",
+        "codigo": "422",
+        "ativo": true
+    },
+    {
+        "nome": "Banco Votorantim S.A.",
+        "codigo": "655",
+        "ativo": true
+    },
+    {
+        "nome": "Banco BTG Pactual S.A.",
+        "codigo": "208",
+        "ativo": true
+    },
+    {
+        "nome": "Banco C6 S.A.",
+        "codigo": "336",
+        "ativo": true
+    },
+    {
+        "nome": "Banco Digio S.A.",
+        "codigo": "335",
+        "ativo": true
+    },
+    {
+        "nome": "Banco Next S.A.",
+        "codigo": "237",
+        "ativo": true
+    },
+    {
+        "nome": "Banco Neon S.A.",
+        "codigo": "735",
+        "ativo": true
+    },
+    {
+        "nome": "Banco Nubank S.A.",
+        "codigo": "260",
+        "ativo": true
+    },
+    {
+        "nome": "Banco PicPay S.A.",
+        "codigo": "380",
+        "ativo": true
+    },
+    {
+        "nome": "Banco Stone S.A.",
+        "codigo": "197",
+        "ativo": true
+    },
+    {
+        "nome": "Banco Will S.A.",
+        "codigo": "280",
+        "ativo": true
+    },
+    {
+        "nome": "Banco Agibank S.A.",
+        "codigo": "121",
+        "ativo": true
+    },
+    {
+        "nome": "Banco Alfa S.A.",
+        "codigo": "025",
+        "ativo": true
+    },
+    {
+        "nome": "Banco Banrisul S.A.",
+        "codigo": "041",
+        "ativo": true
+    },
+    {
+        "nome": "Banco BV S.A.",
+        "codigo": "655",
+        "ativo": true
+    },
+    {
+        "nome": "Banco Daycoval S.A.",
+        "codigo": "707",
+        "ativo": true
+    },
+    {
+        "nome": "Banco Fibra S.A.",
+        "codigo": "224",
+        "ativo": true
+    },
+    {
+        "nome": "Banco Genial S.A.",
+        "codigo": "125",
+        "ativo": true
+    },
+    {
+        "nome": "Banco Guanabara S.A.",
+        "codigo": "612",
+        "ativo": true
+    },
+    {
+        "nome": "Banco Itaucard S.A.",
+        "codigo": "376",
+        "ativo": true
+    },
+    {
+        "nome": "Banco Modal S.A.",
+        "codigo": "746",
+        "ativo": true
+    },
+    {
+        "nome": "Banco Pine S.A.",
+        "codigo": "643",
+        "ativo": true
+    },
+    {
+        "nome": "Banco Rendimento S.A.",
+        "codigo": "633",
+        "ativo": true
+    },
+    {
+        "nome": "Banco Sofisa S.A.",
+        "codigo": "637",
+        "ativo": true
+    },
+    {
+        "nome": "Banco Topázio S.A.",
+        "codigo": "082",
+        "ativo": true
+    },
+    {
+        "nome": "Banco Triângulo S.A.",
+        "codigo": "634",
+        "ativo": true
+    },
+    {
+        "nome": "Banco Unicred S.A.",
+        "codigo": "136",
+        "ativo": true
+    },
+    {
+        "nome": "Banco Xp S.A.",
+        "codigo": "348",
+        "ativo": true
+    }
+]

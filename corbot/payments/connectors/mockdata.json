@@ -1,0 +1,432 @@
+{
+  "test_data": {
+    "error_cases": [
+      {
+        "cpf": "784.933.530-94",
+        "cnpj": "98.702.951/0001-07",
+        "error_message": "Conta não encontrada.",
+        "error_code": "account_not_found"
+      },
+      {
+        "cpf": "827.188.890-04",
+        "cnpj": "65.142.521/0001-29",
+        "error_message": "Conta do recebedor não existe ou foi encerrada.",
+        "error_code": "account_not_exists_or_closed"
+      },
+      {
+        "cpf": "962.348.940-46",
+        "cnpj": "63.071.277/0001-25",
+        "error_message": "Conta bloqueada.",
+        "error_code": "account_blocked"
+      },
+      {
+        "cpf": "926.942.600-98",
+        "cnpj": "85.654.686/0001-97",
+        "error_message": "Conta corrente ou poupança encerrada.",
+        "error_code": "account_closed"
+      },
+      {
+        "cpf": "113.190.500-85",
+        "cnpj": "55.008.244/0001-02",
+        "error_message": "Conta do recebedor sem limite para crédito.",
+        "error_code": "account_no_credit_limit"
+      },
+      {
+        "cpf": "780.562.600-64",
+        "cnpj": "66.165.355/0001-49",
+        "error_message": "Crédito para este recebedor não permitido.",
+        "error_code": "credit_not_allowed"
+      },
+      {
+        "cpf": "907.046.230-30",
+        "cnpj": "47.095.043/0001-61",
+        "error_message": "Conta corrente não encontrada. Recebedor possui somente conta poupança.",
+        "error_code": "checking_account_not_found"
+      },
+      {
+        "cpf": "376.775.520-30",
+        "cnpj": "52.746.896/0001-56",
+        "error_message": "Conta corrente da poupança encerrada.",
+        "error_code": "savings_account_closed"
+      },
+      {
+        "cpf": "994.646.220-67",
+        "cnpj": "55.165.068/0001-12",
+        "error_message": "Dados incorretos do recebedor.",
+        "error_code": "incorrect_receiver_data"
+      },
+      {
+        "cpf": "182.962.650-79",
+        "cnpj": "64.385.962/0001-99",
+        "error_message": "Dados informados não encontrados no banco de destino.",
+        "error_code": "data_not_found_destination_bank"
+      },
+      {
+        "cpf": "210.578.740-19",
+        "cnpj": "65.410.909/0001-63",
+        "error_message": "CPF/CNPJ informado para pagamento diverge com o CPF/CNPJ do titular no Banco.",
+        "error_code": "document_mismatch"
+      },
+      {
+        "cpf": "855.326.670-20",
+        "cnpj": "94.607.997/0001-96",
+        "error_message": "Documento informado CPF/CNPJ possuí bloqueio e não pode receber pagamentos.",
+        "error_code": "document_blocked"
+      },
+      {
+        "cpf": "806.449.500-80",
+        "cnpj": "67.876.823/0001-56",
+        "error_message": "Tipo de conta inválida e/ou que não permite receber transferências/pagamentos de terceiros.",
+        "error_code": "invalid_account_type"
+      },
+      {
+        "cpf": "404.165.650-85",
+        "cnpj": "72.804.989/0001-05",
+        "error_message": "TED devolvida pelo banco.",
+        "error_code": "ted_returned_by_bank"
+      },
+      {
+        "cpf": "810.629.890-66",
+        "cnpj": "74.809.620/0001-02",
+        "error_message": "TED devolvida pelo banco, divergência de CPF/CNPJ.",
+        "error_code": "ted_returned_document_mismatch"
+      },
+      {
+        "cpf": "649.336.250-42",
+        "cnpj": "75.513.791/0001-52",
+        "error_message": "Rejeitado pelo banco do recebedor.",
+        "error_code": "rejected_by_receiver_bank"
+      },
+      {
+        "cpf": "239.039.420-57",
+        "cnpj": "47.173.392/0001-54",
+        "error_message": "Agência não encontrada.",
+        "error_code": "branch_not_found"
+      },
+      {
+        "cpf": "654.431.590-70",
+        "cnpj": "28.764.389/0001-60",
+        "error_message": "Agência não encontrada ou desativada.",
+        "error_code": "branch_not_found_or_disabled"
+      },
+      {
+        "cpf": "955.974.820-33",
+        "cnpj": "90.470.704/0001-10",
+        "error_message": "Agência do recebedor desativada.",
+        "error_code": "receiver_branch_disabled"
+      },
+      {
+        "cpf": "566.514.660-97",
+        "cnpj": "68.229.197/0001-79",
+        "error_message": "Transação não permitida, valor de crédito devolvido pelo banco do recebedor.",
+        "error_code": "transaction_not_allowed_credit_returned"
+      },
+      {
+        "cpf": "793.802.200-49",
+        "cnpj": "94.554.773/0001-63",
+        "error_message": "Transação não permitida, valor devolvido pelo banco do recebedor.",
+        "error_code": "transaction_not_allowed_value_returned"
+      }
+    ],
+    "success_cases": [
+      {
+        "cpf": "123.456.789-00",
+        "cnpj": "11.222.333/0001-81",
+        "error_message": null,
+        "error_code": null,
+        "status": "success"
+      },
+      {
+        "cpf": "987.654.321-00",
+        "cnpj": "22.333.444/0001-92",
+        "error_message": null,
+        "error_code": null,
+        "status": "success"
+      }
+    ]
+  },
+  "lookup_by_cpf": {
+    "78493353094": {
+      "cpf": "784.933.530-94",
+      "cnpj": "98.702.951/0001-07",
+      "error_message": "Conta não encontrada.",
+      "error_code": "account_not_found"
+    },
+    "82718889004": {
+      "cpf": "827.188.890-04",
+      "cnpj": "65.142.521/0001-29",
+      "error_message": "Conta do recebedor não existe ou foi encerrada.",
+      "error_code": "account_not_exists_or_closed"
+    },
+    "96234894046": {
+      "cpf": "962.348.940-46",
+      "cnpj": "63.071.277/0001-25",
+      "error_message": "Conta bloqueada.",
+      "error_code": "account_blocked"
+    },
+    "92694260098": {
+      "cpf": "926.942.600-98",
+      "cnpj": "85.654.686/0001-97",
+      "error_message": "Conta corrente ou poupança encerrada.",
+      "error_code": "account_closed"
+    },
+    "11319050085": {
+      "cpf": "113.190.500-85",
+      "cnpj": "55.008.244/0001-02",
+      "error_message": "Conta do recebedor sem limite para crédito.",
+      "error_code": "account_no_credit_limit"
+    },
+    "78056260064": {
+      "cpf": "780.562.600-64",
+      "cnpj": "66.165.355/0001-49",
+      "error_message": "Crédito para este recebedor não permitido.",
+      "error_code": "credit_not_allowed"
+    },
+    "90704623030": {
+      "cpf": "907.046.230-30",
+      "cnpj": "47.095.043/0001-61",
+      "error_message": "Conta corrente não encontrada. Recebedor possui somente conta poupança.",
+      "error_code": "checking_account_not_found"
+    },
+    "37677552030": {
+      "cpf": "376.775.520-30",
+      "cnpj": "52.746.896/0001-56",
+      "error_message": "Conta corrente da poupança encerrada.",
+      "error_code": "savings_account_closed"
+    },
+    "99464622067": {
+      "cpf": "994.646.220-67",
+      "cnpj": "55.165.068/0001-12",
+      "error_message": "Dados incorretos do recebedor.",
+      "error_code": "incorrect_receiver_data"
+    },
+    "18296265079": {
+      "cpf": "182.962.650-79",
+      "cnpj": "64.385.962/0001-99",
+      "error_message": "Dados informados não encontrados no banco de destino.",
+      "error_code": "data_not_found_destination_bank"
+    },
+    "21057874019": {
+      "cpf": "210.578.740-19",
+      "cnpj": "65.410.909/0001-63",
+      "error_message": "CPF/CNPJ informado para pagamento diverge com o CPF/CNPJ do titular no Banco.",
+      "error_code": "document_mismatch"
+    },
+    "85532667020": {
+      "cpf": "855.326.670-20",
+      "cnpj": "94.607.997/0001-96",
+      "error_message": "Documento informado CPF/CNPJ possuí bloqueio e não pode receber pagamentos.",
+      "error_code": "document_blocked"
+    },
+    "80644950080": {
+      "cpf": "806.449.500-80",
+      "cnpj": "67.876.823/0001-56",
+      "error_message": "Tipo de conta inválida e/ou que não permite receber transferências/pagamentos de terceiros.",
+      "error_code": "invalid_account_type"
+    },
+    "40416565085": {
+      "cpf": "404.165.650-85",
+      "cnpj": "72.804.989/0001-05",
+      "error_message": "TED devolvida pelo banco.",
+      "error_code": "ted_returned_by_bank"
+    },
+    "81062989066": {
+      "cpf": "810.629.890-66",
+      "cnpj": "74.809.620/0001-02",
+      "error_message": "TED devolvida pelo banco, divergência de CPF/CNPJ.",
+      "error_code": "ted_returned_document_mismatch"
+    },
+    "64933625042": {
+      "cpf": "649.336.250-42",
+      "cnpj": "75.513.791/0001-52",
+      "error_message": "Rejeitado pelo banco do recebedor.",
+      "error_code": "rejected_by_receiver_bank"
+    },
+    "23903942057": {
+      "cpf": "239.039.420-57",
+      "cnpj": "47.173.392/0001-54",
+      "error_message": "Agência não encontrada.",
+      "error_code": "branch_not_found"
+    },
+    "65443159070": {
+      "cpf": "654.431.590-70",
+      "cnpj": "28.764.389/0001-60",
+      "error_message": "Agência não encontrada ou desativada.",
+      "error_code": "branch_not_found_or_disabled"
+    },
+    "95597482033": {
+      "cpf": "955.974.820-33",
+      "cnpj": "90.470.704/0001-10",
+      "error_message": "Agência do recebedor desativada.",
+      "error_code": "receiver_branch_disabled"
+    },
+    "56651466097": {
+      "cpf": "566.514.660-97",
+      "cnpj": "68.229.197/0001-79",
+      "error_message": "Transação não permitida, valor de crédito devolvido pelo banco do recebedor.",
+      "error_code": "transaction_not_allowed_credit_returned"
+    },
+    "79380220049": {
+      "cpf": "793.802.200-49",
+      "cnpj": "94.554.773/0001-63",
+      "error_message": "Transação não permitida, valor devolvido pelo banco do recebedor.",
+      "error_code": "transaction_not_allowed_value_returned"
+    },
+    "12345678900": {
+      "cpf": "123.456.789-00",
+      "cnpj": "11.222.333/0001-81",
+      "error_message": null,
+      "error_code": null,
+      "status": "success"
+    },
+    "98765432100": {
+      "cpf": "987.654.321-00",
+      "cnpj": "22.333.444/0001-92",
+      "error_message": null,
+      "error_code": null,
+      "status": "success"
+    }
+  },
+  "lookup_by_cnpj": {
+    "98702951000107": {
+      "cpf": "784.933.530-94",
+      "cnpj": "98.702.951/0001-07",
+      "error_message": "Conta não encontrada.",
+      "error_code": "account_not_found"
+    },
+    "65142521000129": {
+      "cpf": "827.188.890-04",
+      "cnpj": "65.142.521/0001-29",
+      "error_message": "Conta do recebedor não existe ou foi encerrada.",
+      "error_code": "account_not_exists_or_closed"
+    },
+    "63071277000125": {
+      "cpf": "962.348.940-46",
+      "cnpj": "63.071.277/0001-25",
+      "error_message": "Conta bloqueada.",
+      "error_code": "account_blocked"
+    },
+    "85654686000197": {
+      "cpf": "926.942.600-98",
+      "cnpj": "85.654.686/0001-97",
+      "error_message": "Conta corrente ou poupança encerrada.",
+      "error_code": "account_closed"
+    },
+    "55008244000102": {
+      "cpf": "113.190.500-85",
+      "cnpj": "55.008.244/0001-02",
+      "error_message": "Conta do recebedor sem limite para crédito.",
+      "error_code": "account_no_credit_limit"
+    },
+    "66165355000149": {
+      "cpf": "780.562.600-64",
+      "cnpj": "66.165.355/0001-49",
+      "error_message": "Crédito para este recebedor não permitido.",
+      "error_code": "credit_not_allowed"
+    },
+    "47095043000161": {
+      "cpf": "907.046.230-30",
+      "cnpj": "47.095.043/0001-61",
+      "error_message": "Conta corrente não encontrada. Recebedor possui somente conta poupança.",
+      "error_code": "checking_account_not_found"
+    },
+    "52746896000156": {
+      "cpf": "376.775.520-30",
+      "cnpj": "52.746.896/0001-56",
+      "error_message": "Conta corrente da poupança encerrada.",
+      "error_code": "savings_account_closed"
+    },
+    "55165068000112": {
+      "cpf": "994.646.220-67",
+      "cnpj": "55.165.068/0001-12",
+      "error_message": "Dados incorretos do recebedor.",
+      "error_code": "incorrect_receiver_data"
+    },
+    "64385962000199": {
+      "cpf": "182.962.650-79",
+      "cnpj": "64.385.962/0001-99",
+      "error_message": "Dados informados não encontrados no banco de destino.",
+      "error_code": "data_not_found_destination_bank"
+    },
+    "65410909000163": {
+      "cpf": "210.578.740-19",
+      "cnpj": "65.410.909/0001-63",
+      "error_message": "CPF/CNPJ informado para pagamento diverge com o CPF/CNPJ do titular no Banco.",
+      "error_code": "document_mismatch"
+    },
+    "94607997000196": {
+      "cpf": "855.326.670-20",
+      "cnpj": "94.607.997/0001-96",
+      "error_message": "Documento informado CPF/CNPJ possuí bloqueio e não pode receber pagamentos.",
+      "error_code": "document_blocked"
+    },
+    "67876823000156": {
+      "cpf": "806.449.500-80",
+      "cnpj": "67.876.823/0001-56",
+      "error_message": "Tipo de conta inválida e/ou que não permite receber transferências/pagamentos de terceiros.",
+      "error_code": "invalid_account_type"
+    },
+    "72804989000105": {
+      "cpf": "404.165.650-85",
+      "cnpj": "72.804.989/0001-05",
+      "error_message": "TED devolvida pelo banco.",
+      "error_code": "ted_returned_by_bank"
+    },
+    "74809620000102": {
+      "cpf": "810.629.890-66",
+      "cnpj": "74.809.620/0001-02",
+      "error_message": "TED devolvida pelo banco, divergência de CPF/CNPJ.",
+      "error_code": "ted_returned_document_mismatch"
+    },
+    "75513791000152": {
+      "cpf": "649.336.250-42",
+      "cnpj": "75.513.791/0001-52",
+      "error_message": "Rejeitado pelo banco do recebedor.",
+      "error_code": "rejected_by_receiver_bank"
+    },
+    "47173392000154": {
+      "cpf": "239.039.420-57",
+      "cnpj": "47.173.392/0001-54",
+      "error_message": "Agência não encontrada.",
+      "error_code": "branch_not_found"
+    },
+    "28764389000160": {
+      "cpf": "654.431.590-70",
+      "cnpj": "28.764.389/0001-60",
+      "error_message": "Agência não encontrada ou desativada.",
+      "error_code": "branch_not_found_or_disabled"
+    },
+    "90470704000110": {
+      "cpf": "955.974.820-33",
+      "cnpj": "90.470.704/0001-10",
+      "error_message": "Agência do recebedor desativada.",
+      "error_code": "receiver_branch_disabled"
+    },
+    "68229197000179": {
+      "cpf": "566.514.660-97",
+      "cnpj": "68.229.197/0001-79",
+      "error_message": "Transação não permitida, valor de crédito devolvido pelo banco do recebedor.",
+      "error_code": "transaction_not_allowed_credit_returned"
+    },
+    "94554773000163": {
+      "cpf": "793.802.200-49",
+      "cnpj": "94.554.773/0001-63",
+      "error_message": "Transação não permitida, valor devolvido pelo banco do recebedor.",
+      "error_code": "transaction_not_allowed_value_returned"
+    },
+    "11222333000181": {
+      "cpf": "123.456.789-00",
+      "cnpj": "11.222.333/0001-81",
+      "error_message": null,
+      "error_code": null,
+      "status": "success"
+    },
+    "22333444000192": {
+      "cpf": "987.654.321-00",
+      "cnpj": "22.333.444/0001-92",
+      "error_message": null,
+      "error_code": null,
+      "status": "success"
+    }
+  }
+} 

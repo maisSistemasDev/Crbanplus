@@ -1,0 +1,93 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: corbot_postgres
+    environment:
+      POSTGRES_DB: corbot
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: corbot_local
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d corbot"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
+
+  redis:
+    image: redis:7-alpine
+    container_name: corbot_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build:
+      context: ./corbot
+    container_name: corbot_web
+    command: >
+      sh -c "python3 manage.py wait_for_db &&
+             until python3 manage.py migrate --noinput; do
+               echo 'Falha ao aplicar migrações. Revalidando conexão com banco...';
+               python3 manage.py wait_for_db;
+             done &&
+             python3 manage.py collectstatic --noinput &&
+             python3 -m daphne -b 0.0.0.0 -p 8000 corbot.asgi:application"
+    env_file:
+      - ./corbot/.env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./corbot:/app
+      - ./media:/app/media
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  celery:
+    build:
+      context: ./corbot
+    container_name: corbot_celery
+    command: python3 -m celery -A corbot worker --loglevel=info
+    env_file:
+      - ./corbot/.env
+    volumes:
+      - ./corbot:/app
+      - ./media:/app/media
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./corbot-frontend
+      args:
+        PUBLIC_API_URL: http://localhost:8000
+        PUBLIC_WS_URL: ws://localhost:8000
+    container_name: corbot_frontend
+    ports:
+      - "80:3000"
+    environment:
+      - PUBLIC_API_URL=http://localhost:8000
+      - PUBLIC_WS_URL=ws://localhost:8000
+    depends_on:
+      - web
+
+volumes:
+  postgres_data:
+  redis_data:

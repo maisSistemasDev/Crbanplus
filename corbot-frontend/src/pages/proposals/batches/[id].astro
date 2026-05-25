@@ -1,0 +1,8 @@
+---
+import DashboardLayout from '../../../layouts/DashboardLayout.astro';
+import { BatchDetailPage } from '../../../components/react/domain/proposals/ProposalPages';
+const { id } = Astro.params;
+---
+<DashboardLayout title="Detalhe do Lote - CorbanPlus">
+  <BatchDetailPage batchId={id!} client:only="react" />
+</DashboardLayout>

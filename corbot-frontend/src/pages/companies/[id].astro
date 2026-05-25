@@ -1,0 +1,8 @@
+---
+import DashboardLayout from '../../layouts/DashboardLayout.astro';
+import { CompanyEditPage } from '../../components/react/domain/companies/CompanyPages';
+const { id } = Astro.params;
+---
+<DashboardLayout title="Editar Empresa - CorbanPlus">
+  <CompanyEditPage companyId={id!} client:only="react" />
+</DashboardLayout>

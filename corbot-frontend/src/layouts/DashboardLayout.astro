@@ -1,0 +1,13 @@
+---
+import BaseLayout from './BaseLayout.astro';
+import { TourListener } from '../components/react/tour/TourListener';
+interface Props {
+  title?: string;
+}
+const { title = 'CorbanPlus' } = Astro.props;
+---
+<BaseLayout title={title}>
+  <slot />
+  <!-- Listener invisível: executa tours disparados pelo agente via pendingTour store -->
+  <TourListener client:only="react" />
+</BaseLayout>

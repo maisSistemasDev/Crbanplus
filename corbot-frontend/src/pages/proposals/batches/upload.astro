@@ -1,0 +1,7 @@
+---
+import DashboardLayout from '../../../layouts/DashboardLayout.astro';
+import { BatchUploadPage } from '../../../components/react/domain/proposals/ProposalPages';
+---
+<DashboardLayout title="Enviar Lote - CorbanPlus">
+  <BatchUploadPage client:only="react" />
+</DashboardLayout>

@@ -1,0 +1,570 @@
+{
+	"info": {
+		"name": "CorbanPay API — Integrador",
+		"description": "Coleção completa da API REST do CorbanPay para integradores.\n\nConfigure a variável `base_url` com o domínio do seu ambiente e `api_key` com sua chave de API.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "https://seudominio.com/api/v1/prepayment",
+			"type": "string"
+		},
+		{
+			"key": "api_key",
+			"value": "SUA_API_KEY_AQUI",
+			"type": "string"
+		},
+		{
+			"key": "receiver_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "pre_payment_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "active_hash",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "withdrawal_token",
+			"value": "",
+			"type": "string"
+		}
+	],
+	"auth": {
+		"type": "apikey",
+		"apikey": [
+			{
+				"key": "key",
+				"value": "X-Api-Key",
+				"type": "string"
+			},
+			{
+				"key": "value",
+				"value": "{{api_key}}",
+				"type": "string"
+			},
+			{
+				"key": "in",
+				"value": "header",
+				"type": "string"
+			}
+		]
+	},
+	"item": [
+		{
+			"name": "Autenticação",
+			"item": [
+				{
+					"name": "Consultar API Key",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/integrator/api-key/",
+							"host": ["{{base_url}}"],
+							"path": ["integrator", "api-key", ""]
+						},
+						"description": "Retorna dados mascarados da API key do integrador."
+					}
+				},
+				{
+					"name": "Gerar / Renovar API Key",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/integrator/api-key/",
+							"host": ["{{base_url}}"],
+							"path": ["integrator", "api-key", ""]
+						},
+						"description": "Gera uma nova API key ou renova a existente. Guarde a key retornada — ela não será exibida novamente."
+					}
+				},
+				{
+					"name": "Revogar API Key",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/integrator/api-key/",
+							"host": ["{{base_url}}"],
+							"path": ["integrator", "api-key", ""]
+						},
+						"description": "Desativa a API key do integrador."
+					}
+				}
+			]
+		},
+		{
+			"name": "Recebedores",
+			"item": [
+				{
+					"name": "Listar Recebedores",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/receivers/",
+							"host": ["{{base_url}}"],
+							"path": ["receivers", ""]
+						}
+					}
+				},
+				{
+					"name": "Criar Recebedor",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"João Silva\",\n  \"document_number\": \"12345678901\",\n  \"email\": \"joao@email.com\",\n  \"whatsapp\": \"5511999999999\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/receivers/",
+							"host": ["{{base_url}}"],
+							"path": ["receivers", ""]
+						}
+					}
+				},
+				{
+					"name": "Detalhe do Recebedor",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/receivers/{{receiver_id}}/",
+							"host": ["{{base_url}}"],
+							"path": ["receivers", "{{receiver_id}}", ""]
+						}
+					}
+				},
+				{
+					"name": "Atualizar Recebedor",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"João Silva Atualizado\",\n  \"document_number\": \"12345678901\",\n  \"email\": \"novo@email.com\",\n  \"whatsapp\": \"5511888888888\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/receivers/{{receiver_id}}/",
+							"host": ["{{base_url}}"],
+							"path": ["receivers", "{{receiver_id}}", ""]
+						}
+					}
+				},
+				{
+					"name": "Remover Recebedor",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/receivers/{{receiver_id}}/",
+							"host": ["{{base_url}}"],
+							"path": ["receivers", "{{receiver_id}}", ""]
+						},
+						"description": "Retorna 204. Falha com 409 se houver pré-pagamentos ativos."
+					}
+				},
+				{
+					"name": "Buscar Recebedor por Documento",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/integrator/receivers/by-document/12345678901/",
+							"host": ["{{base_url}}"],
+							"path": ["integrator", "receivers", "by-document", "12345678901", ""]
+						},
+						"description": "Busca recebedor pelo CPF/CNPJ."
+					}
+				},
+				{
+					"name": "Saldo e Link do Recebedor",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/integrator/receivers/{{receiver_id}}/balance/",
+							"host": ["{{base_url}}"],
+							"path": ["integrator", "receivers", "{{receiver_id}}", "balance", ""]
+						},
+						"description": "Retorna saldo total de pré-pagamentos ativos e link de saque do recebedor."
+					}
+				}
+			]
+		},
+		{
+			"name": "Pré-Pagamentos",
+			"item": [
+				{
+					"name": "Listar Pré-Pagamentos",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/",
+							"host": ["{{base_url}}"],
+							"path": [""]
+						}
+					}
+				},
+				{
+					"name": "Criar Pré-Pagamento",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"receiver_id\": \"{{receiver_id}}\",\n  \"amount\": \"250.00\",\n  \"external_id\": \"pedido-456\",\n  \"is_same_holder\": true,\n  \"webhook_url\": \"https://meusite.com/webhook\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/",
+							"host": ["{{base_url}}"],
+							"path": [""]
+						}
+					}
+				},
+				{
+					"name": "Detalhe do Pré-Pagamento",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/{{pre_payment_id}}/",
+							"host": ["{{base_url}}"],
+							"path": ["{{pre_payment_id}}", ""]
+						}
+					}
+				},
+				{
+					"name": "Adicionar Depósito",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"amount\": \"100.00\",\n  \"description\": \"Depósito adicional\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{pre_payment_id}}/deposit/",
+							"host": ["{{base_url}}"],
+							"path": ["{{pre_payment_id}}", "deposit", ""]
+						}
+					}
+				},
+				{
+					"name": "Solicitar Saque",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"hash\": \"{{active_hash}}\",\n  \"pix_key\": \"12345678901\",\n  \"pix_type\": \"cpf\",\n  \"is_same_holder\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{pre_payment_id}}/withdraw/",
+							"host": ["{{base_url}}"],
+							"path": ["{{pre_payment_id}}", "withdraw", ""]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Auto-Process",
+			"item": [
+				{
+					"name": "Auto-Process (com receiver_id)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"receiver_id\": \"{{receiver_id}}\",\n  \"amount\": \"500.00\",\n  \"pix_key\": \"12345678901\",\n  \"pix_type\": \"cpf\",\n  \"is_same_holder\": true,\n  \"external_id\": \"auto-789\",\n  \"webhook_url\": \"https://meusite.com/webhook\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/integrator/auto-process/",
+							"host": ["{{base_url}}"],
+							"path": ["integrator", "auto-process", ""]
+						},
+						"description": "Cria pré-pagamento e dispara saque automático usando receiver_id existente."
+					}
+				},
+				{
+					"name": "Auto-Process (com document_number)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"document_number\": \"12345678901\",\n  \"name\": \"João Silva\",\n  \"amount\": \"500.00\",\n  \"pix_key\": \"12345678901\",\n  \"pix_type\": \"cpf\",\n  \"is_same_holder\": true,\n  \"external_id\": \"auto-doc-001\",\n  \"webhook_url\": \"https://meusite.com/webhook\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/integrator/auto-process/",
+							"host": ["{{base_url}}"],
+							"path": ["integrator", "auto-process", ""]
+						},
+						"description": "Cria pré-pagamento e dispara saque automático. Se o recebedor não existir, cria automaticamente pelo document_number."
+					}
+				}
+			]
+		},
+		{
+			"name": "Token / Link de Saque",
+			"item": [
+				{
+					"name": "Gerar Token de Saque",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"ttl_minutes\": 30\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{pre_payment_id}}/token/",
+							"host": ["{{base_url}}"],
+							"path": ["{{pre_payment_id}}", "token", ""]
+						},
+						"description": "Gera link de saque para o recebedor. Consolida pré-pagamentos ativos do mesmo recebedor."
+					}
+				}
+			]
+		},
+		{
+			"name": "Rotas Públicas (Token)",
+			"item": [
+				{
+					"name": "Consultar por Hash",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/link/{{active_hash}}/?token={{withdrawal_token}}",
+							"host": ["{{base_url}}"],
+							"path": ["link", "{{active_hash}}", ""],
+							"query": [
+								{
+									"key": "token",
+									"value": "{{withdrawal_token}}"
+								}
+							]
+						},
+						"description": "Rota pública — não requer API Key. Usa active_hash + token."
+					}
+				},
+				{
+					"name": "Enviar Código 2FA",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"token\": \"{{withdrawal_token}}\",\n  \"channel\": \"email\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/link/{{active_hash}}/send-code/",
+							"host": ["{{base_url}}"],
+							"path": ["link", "{{active_hash}}", "send-code", ""]
+						}
+					}
+				},
+				{
+					"name": "Verificar Código 2FA",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"token\": \"{{withdrawal_token}}\",\n  \"code\": \"123456\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/link/{{active_hash}}/verify-code/",
+							"host": ["{{base_url}}"],
+							"path": ["link", "{{active_hash}}", "verify-code", ""]
+						}
+					}
+				},
+				{
+					"name": "Saque Público (após 2FA)",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"token\": \"{{withdrawal_token}}\",\n  \"pix_key\": \"12345678901\",\n  \"pix_type\": \"cpf\",\n  \"is_same_holder\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/link/{{active_hash}}/withdraw/",
+							"host": ["{{base_url}}"],
+							"path": ["link", "{{active_hash}}", "withdraw", ""]
+						},
+						"description": "Requer verificação 2FA prévia."
+					}
+				}
+			]
+		},
+		{
+			"name": "Webhooks",
+			"item": [
+				{
+					"name": "Listar Eventos",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/integrator/webhooks/",
+							"host": ["{{base_url}}"],
+							"path": ["integrator", "webhooks", ""],
+							"query": [
+								{
+									"key": "event",
+									"value": "deposit",
+									"disabled": true
+								},
+								{
+									"key": "status",
+									"value": "failed",
+									"disabled": true
+								},
+								{
+									"key": "pre_payment_id",
+									"value": "",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Filtros opcionais: event, status, pre_payment_id"
+					}
+				},
+				{
+					"name": "Detalhe do Evento",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/integrator/webhooks/1/",
+							"host": ["{{base_url}}"],
+							"path": ["integrator", "webhooks", "1", ""]
+						}
+					}
+				},
+				{
+					"name": "Reenviar Evento",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/integrator/webhooks/1/resend/",
+							"host": ["{{base_url}}"],
+							"path": ["integrator", "webhooks", "1", "resend", ""]
+						},
+						"description": "Enfileira o reenvio. Retorna 202 Accepted."
+					}
+				}
+			]
+		},
+		{
+			"name": "Relatório de Pagamentos",
+			"item": [
+				{
+					"name": "Relatório com Resumo",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/integrator/payments/report/",
+							"host": ["{{base_url}}"],
+							"path": ["integrator", "payments", "report", ""],
+							"query": [
+								{
+									"key": "status",
+									"value": "completed",
+									"disabled": true
+								},
+								{
+									"key": "pre_payment_id",
+									"value": "",
+									"disabled": true
+								},
+								{
+									"key": "external_id",
+									"value": "",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Filtros opcionais: status, pre_payment_id, external_id"
+					}
+				}
+			]
+		}
+	]
+}

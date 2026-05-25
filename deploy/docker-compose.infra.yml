@@ -1,0 +1,89 @@
+# =============================================================================
+# Stack de Infraestrutura — Portainer CE + Nginx Proxy Manager (NPM)
+#
+# COMO USAR:
+#   1. Suba esta stack UMA VEZ no servidor (antes do stack da aplicação).
+#      docker compose -f deploy/docker-compose.infra.yml up -d
+#
+#   2. Acesse o Portainer em: http://<IP>:9000
+#      (crie o usuário admin no primeiro acesso — expire em 5 min)
+#
+#   3. Acesse o NPM em: http://<IP>:81
+#      Credenciais padrão: admin@example.com / changeme
+#      (troque imediatamente após o primeiro acesso)
+#
+#   4. No Portainer, ao criar o stack do CorbanPlus (docker-compose.prod.yml),
+#      certifique-se de que a rede abaixo está listada no final do compose:
+#
+#        networks:
+#          npm_proxy:
+#            external: true
+#            name: npm_proxy
+#
+#   5. Configure os Proxy Hosts no NPM conforme deploy/npm-corbot-reference.conf
+#
+# PORTAS EXPOSTAS:
+#   Portainer:  9000 (HTTP UI) — coloque atrás do NPM em produção
+#   NPM:        80 / 443 (tráfego público) + 81 (admin UI)
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Portainer CE
+  # ---------------------------------------------------------------------------
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: unless-stopped
+    command: -H unix:///var/run/docker.sock
+    ports:
+      - "9000:9000"
+      - "9443:9443"    # HTTPS nativo (opcional; prefira NPM na frente)
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - portainer_data:/data
+    networks:
+      - npm_proxy
+
+  # ---------------------------------------------------------------------------
+  # Nginx Proxy Manager
+  # ---------------------------------------------------------------------------
+  npm:
+    image: jc21/nginx-proxy-manager:latest
+    container_name: nginx_proxy_manager
+    restart: unless-stopped
+    ports:
+      - "80:80"        # HTTP (redirecionado para HTTPS pelo NPM)
+      - "443:443"      # HTTPS
+      - "81:81"        # Interface de administração do NPM
+    environment:
+      DB_SQLITE_FILE: /data/database.sqlite
+      # Para usar MySQL/MariaDB em vez de SQLite, comente a linha acima e
+      # descomente o bloco abaixo (requer serviço de banco separado):
+      # DB_MYSQL_HOST: "npm_db"
+      # DB_MYSQL_PORT: 3306
+      # DB_MYSQL_USER: "npm"
+      # DB_MYSQL_PASSWORD: "troque-esta-senha"
+      # DB_MYSQL_NAME: "npm"
+    volumes:
+      - npm_data:/data
+      - npm_letsencrypt:/etc/letsencrypt
+    networks:
+      - npm_proxy
+    healthcheck:
+      test: ["CMD", "/bin/check-health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+volumes:
+  portainer_data:
+  npm_data:
+  npm_letsencrypt:
+
+networks:
+  # Rede compartilhada: todos os stacks gerenciados pelo NPM devem se juntar a ela.
+  npm_proxy:
+    name: npm_proxy
+    driver: bridge

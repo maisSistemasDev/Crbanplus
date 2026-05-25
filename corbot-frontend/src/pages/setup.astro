@@ -1,0 +1,7 @@
+---
+import AuthLayout from '../layouts/AuthLayout.astro';
+import { SetupPage } from '../components/react/domain/setup/SetupPage';
+---
+<AuthLayout title="CorbanPlus - Configuracao Inicial">
+  <SetupPage client:only="react" />
+</AuthLayout>

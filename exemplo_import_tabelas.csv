@@ -1,0 +1,6 @@
+nome_no_banco;convenio;valor_minimo;valor_maximo;taxa_de_comissionamento;data_de_vigencia
+Refin 120M;INSS;5000.00;100000.00;3.5;2025-01-01
+Refin 180M;INSS;10000.00;150000.00;4.0;2025-01-01
+Novo Saque FGTS;FGTS;1000.00;50000.00;2.5;2025-02-01
+Cartão Consignado;INSS;500.00;20000.00;5.0;2025-01-15
+Portabilidade;INSS;15000.00;200000.00;3.0;2025-03-01

@@ -1,0 +1,76 @@
+{
+  "description": "Exemplo de requisição para o endpoint de setup inicial do sistema",
+  "endpoint": "POST /api/setup/",
+  "request_body": {
+    "company": {
+      "name": "Auto Promotora Ltda",
+      "trading_name": "Auto Promotora",
+      "person_type": "PJ",
+      "document": "51057418000176",
+      "email": "contato@autopromotor.com.br",
+      "phone": "11999999999",
+      "website": "https://www.autopromotor.com.br",
+      "address": "Rua Exemplo, 123",
+      "city": "São Paulo",
+      "state": "SP",
+      "zip_code": "01234567",
+      "primary_color": "#3498db",
+      "secondary_color": "#2c3e50",
+      "accent_color": "#e74c3c"
+    },
+    "user": {
+      "cpf": "12345678901",
+      "email": "admin@autopromotor.com.br",
+      "password": "SenhaSegura123!",
+      "first_name": "Administrador",
+      "last_name": "Sistema"
+    }
+  },
+  "notes": {
+    "document_field": "O campo 'document' é OBRIGATÓRIO e deve conter:",
+    "for_pj": "CNPJ com 14 dígitos (apenas números, sem formatação): '51057418000176'",
+    "for_pf": "CPF com 11 dígitos (apenas números, sem formatação): '12345678901'",
+    "person_type": "Deve ser 'PJ' para Pessoa Jurídica ou 'PF' para Pessoa Física",
+    "user_cpf": "O campo 'cpf' do user SEMPRE deve ser um CPF válido (11 dígitos), independente do tipo da company",
+    "backward_compatibility": "Por retrocompatibilidade, o sistema aceita 'cnpj' como sinônimo de 'document' e remove automaticamente a formatação (pontos, traços, barras)"
+  },
+  "response_success": {
+    "status": 201,
+    "body": {
+      "detail": "Sistema inicializado com sucesso.",
+      "company_id": "uuid-da-company",
+      "user_id": 1
+    }
+  },
+  "response_errors": {
+    "missing_document": {
+      "status": 400,
+      "body": {
+        "company_errors": {
+          "document": [
+            "Este campo é obrigatório."
+          ]
+        }
+      }
+    },
+    "duplicate_document": {
+      "status": 400,
+      "body": {
+        "company_errors": {
+          "document": [
+            "Corban com este CPF/CNPJ já existe."
+          ]
+        }
+      }
+    },
+    "invalid_document_length": {
+      "status": 400,
+      "body": {
+        "document": [
+          "CPF deve ter 11 dígitos",
+          "CNPJ deve ter 14 dígitos"
+        ]
+      }
+    }
+  }
+}

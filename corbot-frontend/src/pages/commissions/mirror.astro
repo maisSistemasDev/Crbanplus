@@ -1,0 +1,7 @@
+---
+import DashboardLayout from '../../layouts/DashboardLayout.astro';
+import { CommissionMirrorPage } from '../../components/react/domain/commissions/CommissionPages';
+---
+<DashboardLayout title="Espelho - CorbanPlus">
+  <CommissionMirrorPage client:only="react" />
+</DashboardLayout>

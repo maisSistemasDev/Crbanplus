@@ -1,0 +1,25 @@
+# Nunca embutir credenciais / ambiente local na imagem — o Portainer / Compose injeta as vars.
+.env
+.env.*
+!.env.example
+
+# Banco e artefatos locais
+*.sqlite3
+db.sqlite3
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Git / IDE
+.git
+.gitignore
+.cursor
+.vscode
+.idea
+
+# Mídia e estáticos gerados localmente (o volume monta em produção)
+media/
+staticfiles/
