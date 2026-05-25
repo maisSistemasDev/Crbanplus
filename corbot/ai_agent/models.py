@@ -37,6 +37,13 @@ class Message(models.Model):
     role = models.CharField(_('papel'), max_length=10, choices=ROLE_CHOICES)
     content = models.TextField(_('conteúdo'))
     tool_calls = models.JSONField(_('chamadas de ferramentas'), null=True, blank=True)
+    # Arquivo/imagem enviado pelo usuário nesta mensagem
+    file = models.FileField(
+        _('arquivo'), upload_to='ai_agent/uploads/%Y/%m/', null=True, blank=True
+    )
+    file_name = models.CharField(_('nome do arquivo'), max_length=255, blank=True)
+    # Embedding vetorial para recuperação semântica (janela de contexto longa)
+    embedding = models.JSONField(_('embedding'), null=True, blank=True)
     created_at = models.DateTimeField(_('criado em'), auto_now_add=True)
 
     class Meta:

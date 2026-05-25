@@ -4,10 +4,20 @@ from .models import Conversation, Message, TableUpdateSuggestion
 
 
 class MessageSerializer(serializers.ModelSerializer):
+    file_url = serializers.SerializerMethodField()
+
     class Meta:
         model = Message
-        fields = ['id', 'role', 'content', 'tool_calls', 'created_at']
+        fields = ['id', 'role', 'content', 'tool_calls', 'file_url', 'file_name', 'created_at']
         read_only_fields = ['id', 'created_at']
+
+    def get_file_url(self, obj):
+        if not obj.file:
+            return None
+        request = self.context.get('request')
+        if request:
+            return request.build_absolute_uri(obj.file.url)
+        return obj.file.url
 
 
 class ConversationSerializer(serializers.ModelSerializer):

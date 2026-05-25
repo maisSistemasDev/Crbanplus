@@ -1,6 +1,7 @@
 from django.utils import timezone
 from rest_framework import permissions, status
 from rest_framework.response import Response
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 
 from core.base_views import BaseApiView
 from core.permissions import IsAdminOrGerenteOrLider
@@ -9,7 +10,7 @@ from bank.models import Table
 
 from .models import TableUpdateSuggestion, Conversation, Message
 from .serializers import TableUpdateSuggestionSerializer, ConversationSerializer, MessageSerializer
-from .llm import get_ai_reply
+from .llm import get_ai_reply, compute_and_store_embedding
 
 
 class TableSuggestionListView(BaseApiView):
@@ -208,14 +209,15 @@ class ConversationDetailView(BaseApiView):
 
 class ConversationMessageView(BaseApiView):
     """
-    Recebe uma mensagem do usuário e retorna a resposta do agente.
+    Recebe mensagem do usuário (texto + arquivo opcional) e retorna resposta do agente.
+
+    Aceita multipart/form-data (com arquivo) ou application/json (só texto).
+    Campos: content (str), file (File, opcional)
 
     Response: { "reply": "<texto>", "tour_name": "<nome|null>", "conversation_id": <id> }
-
-    Fase 1 (sem chave AI): respostas por palavras-chave.
-    Fase 2 (com chave AI): chamada real ao OpenAI/Anthropic via llm.get_ai_reply().
     """
     permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def post(self, request, pk, format=None):
         try:
@@ -224,27 +226,77 @@ class ConversationMessageView(BaseApiView):
             return Response({'detail': 'Conversa não encontrada.'}, status=status.HTTP_404_NOT_FOUND)
 
         content = (request.data.get('content') or '').strip()
-        if not content:
-            return Response({'detail': 'Mensagem não pode ser vazia.'}, status=status.HTTP_400_BAD_REQUEST)
+        uploaded_file = request.FILES.get('file')
+
+        if not content and not uploaded_file:
+            return Response(
+                {'detail': 'Mensagem ou arquivo obrigatório.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Conteúdo padrão quando só arquivo é enviado
+        if not content and uploaded_file:
+            content = f'[Arquivo enviado: {uploaded_file.name}]'
 
         # Salva mensagem do usuário
-        Message.objects.create(conversation=conversation, role='user', content=content)
+        user_msg = Message.objects.create(
+            conversation=conversation,
+            role='user',
+            content=content,
+        )
+        if uploaded_file:
+            user_msg.file = uploaded_file
+            user_msg.file_name = uploaded_file.name
+            user_msg.save(update_fields=['file', 'file_name'])
 
-        # Recupera histórico para o LLM (últimas 20 mensagens)
+        # Recupera histórico completo para janela de contexto
         history = list(
             Message.objects.filter(conversation=conversation)
             .order_by('created_at')
-            .values('role', 'content')[:20]
+            .values('role', 'content')
         )
 
-        # Gera resposta (LLM ou palavras-chave)
-        reply_text, tour_name = get_ai_reply(history)
+        # Caminho do arquivo no disco (para passar ao LLM com visão)
+        file_path = user_msg.file.path if user_msg.file else None
+
+        # Chama o LLM
+        reply_text, tour_name = get_ai_reply(
+            history=history,
+            conversation_id=conversation.pk,
+            file_path=file_path,
+        )
 
         # Salva resposta do assistente
-        Message.objects.create(conversation=conversation, role='assistant', content=reply_text)
+        assistant_msg = Message.objects.create(
+            conversation=conversation,
+            role='assistant',
+            content=reply_text,
+        )
+
+        # Computa embeddings em background para mensagens antigas (janela de contexto longa)
+        try:
+            from core.models import SystemSettings
+            settings = SystemSettings.get_solo()
+            api_key = (settings.ai_api_key or '').strip()
+            if api_key and settings.ai_provider == 'openai':
+                from celery import shared_task
+                # Agenda embedding das duas mensagens em background
+                _schedule_embeddings(user_msg.pk, assistant_msg.pk, api_key)
+        except Exception:
+            pass
 
         return Response({
             'reply': reply_text,
             'tour_name': tour_name,
             'conversation_id': pk,
         })
+
+
+def _schedule_embeddings(user_msg_pk: int, assistant_msg_pk: int, api_key: str) -> None:
+    """Tenta agendar cálculo de embeddings via Celery. Falha silenciosamente."""
+    try:
+        from .tasks import compute_message_embedding
+        compute_message_embedding.delay(user_msg_pk, api_key)
+        compute_message_embedding.delay(assistant_msg_pk, api_key)
+    except Exception:
+        pass

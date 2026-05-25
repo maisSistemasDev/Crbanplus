@@ -12,6 +12,17 @@ from celery import shared_task
 logger = logging.getLogger(__name__)
 
 
+@shared_task(bind=True, max_retries=3, default_retry_delay=120)
+def compute_message_embedding(self, message_pk: int, api_key: str):
+    """Computa e armazena embedding vetorial de uma mensagem (para contexto longo)."""
+    try:
+        from .llm import compute_and_store_embedding
+        compute_and_store_embedding(message_pk, api_key)
+    except Exception as exc:
+        logger.warning("compute_message_embedding falhou para msg %s: %s", message_pk, exc)
+        raise self.retry(exc=exc)
+
+
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def generate_suggestions_for_table(self, table_id: str, history_id: str):
     """
