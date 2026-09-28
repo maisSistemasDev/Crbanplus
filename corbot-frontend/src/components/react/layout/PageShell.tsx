@@ -29,7 +29,7 @@ export function PageShell({ children }: Props) {
       return;
     }
     setReady(true);
-    const mq = window.matchMedia('(max-width: 767px)');
+    const mq = window.matchMedia('(max-width: 767px)'); /* alinhado ao md: 768px do Tailwind */
     setIsMobile(mq.matches);
     const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
     mq.addEventListener('change', handler);
@@ -56,9 +56,12 @@ export function PageShell({ children }: Props) {
             {isDashboard ? (
               <MobileHome />
             ) : (
-              <div className="flex flex-col min-h-screen bg-[var(--color-body-bg)] pb-20">
+              <div
+                className="flex flex-col min-h-screen bg-[var(--color-body-bg)]"
+                style={{ paddingBottom: 'calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px))' }}
+              >
                 <HeaderContent />
-                <main className="flex-1 overflow-y-auto p-4 bg-[var(--color-body-bg)]">
+                <main className="flex-1 overflow-y-auto p-3 bg-[var(--color-body-bg)]">
                   {children}
                 </main>
               </div>
@@ -75,7 +78,7 @@ export function PageShell({ children }: Props) {
               }}
             >
               <HeaderContent />
-              <main className="flex-1 overflow-y-auto p-6 bg-[var(--color-body-bg)]">
+              <main className="flex-1 overflow-y-auto p-4 bg-[var(--color-body-bg)]">
                 {children}
               </main>
             </div>

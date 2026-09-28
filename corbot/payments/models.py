@@ -1,11 +1,16 @@
 """
 Modelos para controle de pagamentos e grupos de comissionamento.
 """
+import hashlib
+import secrets
+import uuid
+
 from django.db import models
+from django.utils import timezone
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.utils.translation import gettext_lazy as _
 
-from core.models import User, Company
+from core.models import User, Company, TimeStampedModel
 from bank.models import Bank, Table
 
 
@@ -30,6 +35,15 @@ class CommissionRules(models.Model):
         verbose_name=_("Faixa de Comissionamento")
     )
     commission_rate = models.DecimalField(_("Taxa de Comissão"), max_digits=5, decimal_places=2, validators=[MinValueValidator(0), MaxValueValidator(100)],default=0)
+    fixed_value = models.DecimalField(
+        _("Valor Fixo de Comissão"),
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        default=None,
+        validators=[MinValueValidator(0)],
+    )
     created_at = models.DateTimeField(_("Criado em"), auto_now_add=True)
     updated_at = models.DateTimeField(_("Atualizado em"), auto_now=True)
     is_active = models.BooleanField(_("Ativo"), default=True)
@@ -40,7 +54,8 @@ class CommissionRules(models.Model):
             "bank": self.bank.id if self.bank else None,
             "table": self.table.id if self.table else None,
             "commission_range": self.commission_range.id if self.commission_range else None,
-            "commission_rate": self.commission_rate
+            "commission_rate": self.commission_rate,
+            "fixed_value": self.fixed_value,
         }
     
     class Meta:
@@ -137,6 +152,14 @@ class CommissionGroup(models.Model):
         null=True,
         blank=True
     )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        related_name='created_commission_groups',
+        verbose_name=_("Criado por"),
+        null=True,
+        blank=True,
+    )
     
     class Meta:
         verbose_name = _("Grupo de Comissionamento")
@@ -155,10 +178,95 @@ class CommissionGroup(models.Model):
             "color": self.color,
             "by_leader": self.by_leader,
             "leader": self.leader.id if self.leader else None,
+            "created_by": self.created_by.id if self.created_by else None,
             "commission_rules": [rule.get_config() for rule in self.commission_rules.all()],
             "created_at": self.created_at,
             "updated_at": self.updated_at
         }
+
+class CommissionGroupRegistrationLink(TimeStampedModel):
+    """Link público de cadastro vinculado a um grupo de comissionamento."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    commission_group = models.ForeignKey(
+        CommissionGroup,
+        on_delete=models.CASCADE,
+        related_name='registration_links',
+        verbose_name=_('grupo de comissionamento'),
+    )
+    company = models.ForeignKey(
+        Company,
+        on_delete=models.CASCADE,
+        related_name='registration_links',
+        verbose_name=_('corban'),
+    )
+    token_prefix = models.CharField(_('prefixo do token'), max_length=12, db_index=True)
+    token_hash = models.CharField(_('hash do token'), max_length=64, unique=True)
+    created_by_api_key = models.ForeignKey(
+        'core.APIKey',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='registration_links',
+        verbose_name=_('criado por API Key'),
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_registration_links',
+        verbose_name=_('criado por'),
+    )
+    expires_at = models.DateTimeField(_('expira em'), null=True, blank=True)
+    max_uses = models.PositiveIntegerField(_('máximo de usos'), null=True, blank=True)
+    uses_count = models.PositiveIntegerField(_('usos'), default=0)
+    allowed_role = models.CharField(
+        _('papel permitido'),
+        max_length=20,
+        default=User.VENDEDOR,
+    )
+    is_active = models.BooleanField(_('ativo'), default=True)
+
+    class Meta:
+        verbose_name = _('link de cadastro de grupo')
+        verbose_name_plural = _('links de cadastro de grupo')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.commission_group.name} ({self.token_prefix}***)'
+
+    @classmethod
+    def generate_token(cls) -> tuple[str, str, str]:
+        raw = secrets.token_urlsafe(24)
+        full_token = f'rgl_{raw}'
+        prefix = full_token[:12]
+        token_hash = hashlib.sha256(full_token.encode()).hexdigest()
+        return full_token, prefix, token_hash
+
+    @classmethod
+    def find_by_token(cls, token: str):
+        if not token or not token.startswith('rgl_'):
+            return None
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
+        try:
+            return cls.objects.select_related(
+                'commission_group', 'company', 'commission_group__company',
+            ).get(token_hash=token_hash, is_active=True)
+        except cls.DoesNotExist:
+            return None
+
+    def is_usable(self) -> bool:
+        if not self.is_active:
+            return False
+        if self.expires_at and self.expires_at < timezone.now():
+            return False
+        if self.max_uses is not None and self.uses_count >= self.max_uses:
+            return False
+        if not self.commission_group.is_active:
+            return False
+        return True
+
 
 class CommissionGroupByCompany(models.Model):
     """
@@ -303,12 +411,14 @@ class Commission(models.Model):
     WITHDRAW_AVAILABLE = 'withdraw_available'
     PENDING_MANUAL_PAYMENT = 'pending_manual_payment'
     PAID = 'paid'
+    SINISTRO = 'sinistro'
     
     RELEASE_STATUS_CHOICES = [
         (NOT_RELEASED, _('Não liberado')),
         (WITHDRAW_AVAILABLE, _('Saque liberado')),
         (PENDING_MANUAL_PAYMENT, _('Aguardando pagamento')),
         (PAID, _('Pago')),
+        (SINISTRO, _('Sinistro')),
     ]
     
     # Usando referência de string para evitar importação circular
@@ -349,6 +459,20 @@ class Commission(models.Model):
         _("Valor"), 
         max_digits=10, 
         decimal_places=2
+    )
+    gross_value = models.DecimalField(
+        _("Valor bruto"),
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text=_("Valor original antes do abatimento de debitos."),
+    )
+    debit_discount = models.DecimalField(
+        _("Abatimento de debito"),
+        max_digits=10,
+        decimal_places=2,
+        default=0,
     )
     payment = models.ForeignKey(
         Payment, 
@@ -489,3 +613,162 @@ class CorbanPayTransaction(models.Model):
 
     def __str__(self):
         return f"CorbanPay #{self.id} – {self.withdraw.user} – {self.get_status_display()}"
+
+
+class UserDebit(models.Model):
+    """Debito lancado para um usuario de corban ou para o proprio corban."""
+
+    MANUAL = 'manual'
+    SINISTRO = 'sinistro'
+
+    ORIGIN_CHOICES = [
+        (MANUAL, _('Manual')),
+        (SINISTRO, _('Sinistro')),
+    ]
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='debits',
+        verbose_name=_("Usuário"),
+        null=True,
+        blank=True,
+    )
+    company = models.ForeignKey(
+        Company,
+        on_delete=models.CASCADE,
+        related_name='debits',
+        verbose_name=_("Corban"),
+        null=True,
+        blank=True,
+    )
+    amount = models.DecimalField(_("Valor do débito"), max_digits=10, decimal_places=2)
+    remaining_amount = models.DecimalField(_("Saldo pendente"), max_digits=10, decimal_places=2)
+    reason = models.CharField(_("Motivo"), max_length=255)
+    origin = models.CharField(
+        _("Origem"),
+        max_length=20,
+        choices=ORIGIN_CHOICES,
+        default=MANUAL,
+    )
+    is_active = models.BooleanField(_("Ativo"), default=True)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        related_name='created_debits',
+        verbose_name=_("Criado por"),
+        null=True,
+        blank=True,
+    )
+    created_at = models.DateTimeField(_("Criado em"), auto_now_add=True)
+    updated_at = models.DateTimeField(_("Atualizado em"), auto_now=True)
+
+    class Meta:
+        verbose_name = _("Débito")
+        verbose_name_plural = _("Débitos")
+        ordering = ['-created_at']
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    models.Q(user__isnull=False, company__isnull=True)
+                    | models.Q(user__isnull=True, company__isnull=False)
+                ),
+                name='userdebit_exactly_one_owner',
+            ),
+        ]
+
+    def __str__(self):
+        return f"Débito {self.owner_label} - {self.remaining_amount}/{self.amount}"
+
+    @property
+    def owner_label(self) -> str:
+        if self.company_id:
+            return self.company.name
+        return str(self.user) if self.user_id else '-'
+
+
+class ProposalClaim(models.Model):
+    """Sinistro registrado em uma proposta; sempre gera um debito de origem 'sinistro'."""
+
+    FRAUD = 'fraude'
+    WRONG_CORBAN = 'pago_corban_errado'
+
+    TYPE_CHOICES = [
+        (FRAUD, _('Fraude confirmada')),
+        (WRONG_CORBAN, _('Pago ao corban errado')),
+    ]
+
+    proposal = models.ForeignKey(
+        'proposals.Proposal',
+        on_delete=models.CASCADE,
+        related_name='claims',
+        verbose_name=_("Proposta"),
+    )
+    claim_type = models.CharField(_("Tipo de sinistro"), max_length=30, choices=TYPE_CHOICES)
+    description = models.TextField(_("Descrição"), blank=True, default='')
+    amount = models.DecimalField(_("Valor do sinistro"), max_digits=10, decimal_places=2)
+    debit = models.ForeignKey(
+        UserDebit,
+        on_delete=models.SET_NULL,
+        related_name='claims',
+        verbose_name=_("Débito gerado"),
+        null=True,
+        blank=True,
+    )
+    charged_company = models.ForeignKey(
+        Company,
+        on_delete=models.SET_NULL,
+        related_name='charged_claims',
+        verbose_name=_("Corban debitado"),
+        null=True,
+        blank=True,
+    )
+    correct_company = models.ForeignKey(
+        Company,
+        on_delete=models.SET_NULL,
+        related_name='received_claims',
+        verbose_name=_("Corban correto"),
+        null=True,
+        blank=True,
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        related_name='created_claims',
+        verbose_name=_("Registrado por"),
+        null=True,
+        blank=True,
+    )
+    created_at = models.DateTimeField(_("Criado em"), auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Sinistro")
+        verbose_name_plural = _("Sinistros")
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Sinistro {self.get_claim_type_display()} - proposta {self.proposal_id}"
+
+
+class CommissionDebitDiscount(models.Model):
+    """Rastreia quanto de cada debito foi abatido em uma comissao."""
+
+    commission = models.ForeignKey(
+        Commission,
+        on_delete=models.CASCADE,
+        related_name='debit_discounts',
+        verbose_name=_("Comissão"),
+    )
+    debit = models.ForeignKey(
+        UserDebit,
+        on_delete=models.CASCADE,
+        related_name='applications',
+        verbose_name=_("Débito"),
+    )
+    amount = models.DecimalField(_("Valor abatido"), max_digits=10, decimal_places=2)
+    created_at = models.DateTimeField(_("Criado em"), auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Abatimento de débito em comissão")
+        verbose_name_plural = _("Abatimentos de débito em comissão")
+        ordering = ['-created_at']

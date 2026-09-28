@@ -1,0 +1,398 @@
+<table id="commisionTable" class="table table-responsible table-striped table-sm table-hover table-bordered m-0">
+                            <thead>
+                                <tr>
+                                    <th>Operação</th>
+                                    <th class="text-center">Parcelas</th>
+                                    <th class="text-center">Flat</th>
+                                    <th class="text-center">Incide sobre</th>
+                                    <th class="text-center">Bônus</th>
+                                    <th class="text-center">Incide sobre</th>
+                                    <th class="text-center">Diferido</th>
+                                    <th class="text-center">Incide sobre</th>
+                                    <th class="text-center" style="font-weight: bold; font-size: 12px;">Comissão Total</th>
+                                                                        <th class="text-center">Grupo</th>
+                                                                        <th class="text-center">Vigência</th>
+                                    <th class="text-center">Obs</th>
+                                    <th class="text-center">Formalização</th>
+                                </tr>
+                            </thead>
+                            <tbody><tr>
+                    <td>UNNO - FGTS - Tsunami 50,00 ATE 10,000,00</td>
+                    <td class="text-center text-nowrap">1 até 1000</td>
+                    <td class="text-center">51.00%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">51.00%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">22/07/2025</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>UNNO - FGTS - Jade 50,00 ATE 600,00</td>
+                    <td class="text-center text-nowrap">1 até 1000</td>
+                    <td class="text-center">47.00%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">47.00%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">22/07/2025</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>UNNO - FGTS - Jade 600,01 ATE 2 000,00</td>
+                    <td class="text-center text-nowrap">1 até 1000</td>
+                    <td class="text-center">45.00%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">45.00%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">22/07/2025</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>UNNO - FGTS - Ouro top 50,00 ATE 600,00</td>
+                    <td class="text-center text-nowrap">1 até 1000</td>
+                    <td class="text-center">45.00%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">45.00%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">22/07/2025</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>UNNO - FGTS - Ouro top 600,01 ATE 2 000,00</td>
+                    <td class="text-center text-nowrap">1 até 1000</td>
+                    <td class="text-center">43.00%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">43.00%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">22/07/2025</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>UNNO - FGTS - Jade 2,000,01 ATE 20 mil</td>
+                    <td class="text-center text-nowrap">1 até 1000</td>
+                    <td class="text-center">41.00%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">41.00%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">22/07/2025</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>UNNO - FGTS - Ouro top 2000,01 ATE 20 mil</td>
+                    <td class="text-center text-nowrap">1 até 1000</td>
+                    <td class="text-center">41.00%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">41.00%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">22/07/2025</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>UNNO - FGTS - Agata 50,00 ATE 350,00</td>
+                    <td class="text-center text-nowrap">1 até 1000</td>
+                    <td class="text-center">30.00%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">30.00%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">22/07/2025</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>UNNO - FGTS - Esmeralda 50,00 ATE 350,00</td>
+                    <td class="text-center text-nowrap">1 até 1000</td>
+                    <td class="text-center">30.00%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">30.00%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">22/07/2025</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>UNNO - FGTS - Rubi 50,00 ATE 350,00</td>
+                    <td class="text-center text-nowrap">1 até 1000</td>
+                    <td class="text-center">27.00%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">27.00%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">22/07/2025</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>UNNO - FGTS - Esmeralda 350,01 ATE 800,00</td>
+                    <td class="text-center text-nowrap">1 até 1000</td>
+                    <td class="text-center">25.00%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">25.00%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">22/07/2025</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>UNNO - FGTS - Agata 350,01 ATE 800,00</td>
+                    <td class="text-center text-nowrap">1 até 1000</td>
+                    <td class="text-center">25.00%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">25.00%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">22/07/2025</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>UNNO - FGTS - Rubi 350,01 ATE 1000,00</td>
+                    <td class="text-center text-nowrap">1 até 1000</td>
+                    <td class="text-center">23.00%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">23.00%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">22/07/2025</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>UNNO - FGTS - Agata 800,01 ATE 1000,00</td>
+                    <td class="text-center text-nowrap">1 até 1000</td>
+                    <td class="text-center">23.00%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">23.00%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">22/07/2025</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>UNNO - FGTS - Esmeralda 800,01 ATE 1000,00</td>
+                    <td class="text-center text-nowrap">1 até 1000</td>
+                    <td class="text-center">23.00%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">23.00%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">22/07/2025</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>UNNO - FGTS - Agata 1,000,01 ATE 50 mil</td>
+                    <td class="text-center text-nowrap">1 até 1000</td>
+                    <td class="text-center">19.00%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">19.00%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">22/07/2025</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>UNNO - FGTS - Esmeralda 1000,01 ATE 50 mil</td>
+                    <td class="text-center text-nowrap">1 até 1000</td>
+                    <td class="text-center">19.00%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">19.00%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">22/07/2025</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>UNNO - FGTS - Rubi 1,000,01 ATE 50 mil</td>
+                    <td class="text-center text-nowrap">1 até 1000</td>
+                    <td class="text-center">19.00%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">19.00%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">22/07/2025</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>UNNO - FGTS - Safira 50,00 ATE 20 mil</td>
+                    <td class="text-center text-nowrap">1 até 1000</td>
+                    <td class="text-center">17.00%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">17.00%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">22/07/2025</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>UNNO - CLT - Copacabana</td>
+                    <td class="text-center text-nowrap">1 até 150</td>
+                    <td class="text-center">8.00%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">8.00%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">11/01/2026</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>UNNO - CLT - CLT TAXA 6,99% PRAZO DE 6 ATE 26</td>
+                    <td class="text-center text-nowrap">1 até 150</td>
+                    <td class="text-center">8.00%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">8.00%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">22/12/2025</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>UNNO - FGTS - Amestista 50,00 ATE 20 mil</td>
+                    <td class="text-center text-nowrap">1 até 1000</td>
+                    <td class="text-center">6.00%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">6.00%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">22/07/2025</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>UNNO - CLT - Trancoso</td>
+                    <td class="text-center text-nowrap">1 até 150</td>
+                    <td class="text-center">6.00%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">6.00%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">11/01/2026</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>UNNO - CLT - CLT TAXA 5,99% PRAZO DE 6 ATE 25</td>
+                    <td class="text-center text-nowrap">1 até 150</td>
+                    <td class="text-center">6.00%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">6.00%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">22/12/2025</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>UNNO - CLT - Boa viagem</td>
+                    <td class="text-center text-nowrap">1 até 150</td>
+                    <td class="text-center">2.50%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">2.50%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">11/01/2026</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>UNNO - CLT - CLT TAXA 4,99% PRAZO DE 6 ATE 24</td>
+                    <td class="text-center text-nowrap">1 até 150</td>
+                    <td class="text-center">2.50%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">2.50%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">22/12/2025</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>UNNO - CLT - Piscinao de Ramos</td>
+                    <td class="text-center text-nowrap">1 até 150</td>
+                    <td class="text-center">1.50%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">1.50%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">11/01/2026</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr></tbody>
+                        </table>

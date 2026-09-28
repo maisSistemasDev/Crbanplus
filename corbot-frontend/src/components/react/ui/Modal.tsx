@@ -9,6 +9,8 @@ interface ModalProps {
   title?: string;
   children: React.ReactNode;
   size?: 'sm' | 'md' | 'lg' | 'xl';
+  /** Limita a altura do modal e rola só o corpo (útil para listas longas). */
+  scrollBody?: boolean;
 }
 
 const sizeStyles = {
@@ -18,7 +20,7 @@ const sizeStyles = {
   xl: 'max-w-2xl',
 };
 
-export function Modal({ open, isOpen, onClose, title, children, size = 'md' }: ModalProps) {
+export function Modal({ open, isOpen, onClose, title, children, size = 'md', scrollBody = false }: ModalProps) {
   const isVisible = open ?? isOpen ?? false;
   const overlayRef = useRef<HTMLDivElement>(null);
 
@@ -56,12 +58,13 @@ export function Modal({ open, isOpen, onClose, title, children, size = 'md' }: M
       <div
         className={clsx(
           'w-full bg-white rounded-xl shadow-xl',
+          scrollBody && 'flex max-h-[min(90vh,900px)] flex-col',
           sizeStyles[size],
         )}
       >
         {title && (
-          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-            <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+          <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-4 py-3">
+            <h3 className="text-base font-semibold text-gray-900">{title}</h3>
             <button
               onClick={onClose}
               className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
@@ -70,7 +73,7 @@ export function Modal({ open, isOpen, onClose, title, children, size = 'md' }: M
             </button>
           </div>
         )}
-        <div className="px-6 py-4">{children}</div>
+        <div className={clsx('px-4 py-3', scrollBody && 'min-h-0 flex-1 overflow-y-auto')}>{children}</div>
       </div>
     </div>
   );

@@ -35,6 +35,8 @@ export function AgreementList() {
       columns={columns}
       createLabel="Novo Convenio"
       searchPlaceholder="Buscar convenio..."
+      selectable
+      bulkDeleteEndpoint={ENDPOINTS.AGREEMENTS_BULK_DELETE}
     />
   );
 }

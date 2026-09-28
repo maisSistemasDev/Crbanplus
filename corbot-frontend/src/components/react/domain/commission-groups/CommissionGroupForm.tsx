@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { api } from '../../../../lib/api/client';
 import { ENDPOINTS } from '../../../../lib/api/endpoints';
 import type { Company } from '../../../../lib/api/types';
 import { Button } from '../../ui/Button';
+import { SearchSelect } from '../../ui/SearchSelect';
 
 type GroupType = 'promotora' | 'corban';
 
@@ -10,12 +11,18 @@ interface Props {
   onSubmit: (values: Record<string, any>) => Promise<void>;
   loading: boolean;
   onCancel: () => void;
+  /** Força o tipo do grupo (esconde o seletor). */
+  forcedType?: GroupType;
 }
 
-export function CommissionGroupForm({ onSubmit, loading, onCancel }: Props) {
-  const [groupType, setGroupType] = useState<GroupType>('promotora');
+export function CommissionGroupForm({ onSubmit, loading, onCancel, forcedType }: Props) {
+  const [groupType, setGroupType] = useState<GroupType>(forcedType || 'promotora');
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loadingCompanies, setLoadingCompanies] = useState(false);
+  const companyOptions = useMemo(
+    () => companies.map((c) => ({ value: String(c.id), label: c.name })),
+    [companies],
+  );
   const [form, setForm] = useState({
     name: '',
     description: '',
@@ -25,17 +32,21 @@ export function CommissionGroupForm({ onSubmit, loading, onCancel }: Props) {
   });
 
   useEffect(() => {
+    if (forcedType) setGroupType(forcedType);
+  }, [forcedType]);
+
+  useEffect(() => {
     if (groupType === 'corban' && companies.length === 0) {
       setLoadingCompanies(true);
       api
-        .get<Company[] | { results: Company[] }>(ENDPOINTS.COMPANIES)
+        .get<Company[] | { results: Company[] }>(`${ENDPOINTS.COMPANIES}?page_size=500`)
         .then((res) => {
           const list = Array.isArray(res) ? res : (res as any).results ?? [];
           setCompanies(list);
         })
         .finally(() => setLoadingCompanies(false));
     }
-  }, [groupType]);
+  }, [groupType, companies.length]);
 
   function handleChange(
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
@@ -63,6 +74,7 @@ export function CommissionGroupForm({ onSubmit, loading, onCancel }: Props) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {/* Tipo de grupo */}
+      {!forcedType && (
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
           Tipo de grupo
@@ -96,10 +108,26 @@ export function CommissionGroupForm({ onSubmit, loading, onCancel }: Props) {
         </div>
         {groupType === 'promotora' && (
           <p className="mt-1 text-xs text-gray-500">
-            Sem empresa vinculada — adicione corbans (usuários) diretamente ao grupo.
+            Sem empresa vinculada — usado para regras/tetos da promotora com vínculos de Corban.
+          </p>
+        )}
+        {groupType === 'corban' && (
+          <p className="mt-1 text-xs text-gray-500">
+            Vinculado a 1 Corban — só aceita usuários da hierarquia dessa empresa.
           </p>
         )}
       </div>
+      )}
+      {forcedType === 'corban' && (
+        <p className="text-xs text-gray-500">
+          Este grupo fica vinculado a 1 Corban e só aceita usuários da hierarquia dessa empresa.
+        </p>
+      )}
+      {forcedType === 'promotora' && (
+        <p className="text-xs text-gray-500">
+          Grupo da promotora, sem Corban vinculado no cadastro.
+        </p>
+      )}
 
       {/* Empresa (somente para corban) */}
       {groupType === 'corban' && (
@@ -107,23 +135,15 @@ export function CommissionGroupForm({ onSubmit, loading, onCancel }: Props) {
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Empresa do Corban <span className="text-red-500">*</span>
           </label>
-          <select
+          <SearchSelect
             name="company"
             value={form.company}
             onChange={handleChange}
             required
             disabled={loadingCompanies}
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[var(--color-primary)]"
-          >
-            <option value="">
-              {loadingCompanies ? 'Carregando...' : 'Selecione a empresa'}
-            </option>
-            {companies.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+            placeholder={loadingCompanies ? 'Carregando...' : 'Selecione a empresa'}
+            options={companyOptions}
+          />
         </div>
       )}
 

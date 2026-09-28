@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { api, API_BASE_URL } from '../../../../lib/api/client';
+import { extractErrorMessage } from '../../../../lib/api/errors';
 import { ENDPOINTS } from '../../../../lib/api/endpoints';
 import { Button } from '../../ui/Button';
-import { Badge } from '../../ui/Badge';
+import { StatusBadge } from '../../ui/Badge';
 import { DataTable } from '../../ui/DataTable';
 import { PageSpinner } from '../../ui/Spinner';
 import { useBatchProgress } from '../../../../lib/ws/useBatchProgress';
@@ -22,11 +23,52 @@ const proposalColumns: Column<Record<string, unknown>>[] = [
   { key: 'client_name', header: 'Cliente' },
   { key: 'client_document', header: 'CPF' },
   {
+    key: 'digitador',
+    header: 'Digitador / Acesso',
+    render: (item) => {
+      const digitador = String((item.digitador as string | null) ?? '').trim();
+      const bankAccess = item.bank_access_details as { display_name?: string; username?: string } | undefined;
+      const accessName = bankAccess?.display_name || bankAccess?.username;
+      if (digitador && accessName) {
+        return (
+          <div>
+            <div className="font-medium text-sm">{digitador}</div>
+            <div className="text-xs text-gray-500">{accessName}</div>
+          </div>
+        );
+      }
+      if (digitador) return <span className="text-sm">{digitador}</span>;
+      if (accessName) return <span className="text-sm">{accessName}</span>;
+      const seller = item.seller_details as { first_name?: string; last_name?: string } | undefined;
+      return seller ? `${seller.first_name || ''} ${seller.last_name || ''}`.trim() || '-' : '-';
+    },
+  },
+  {
     key: 'amount',
     header: 'Valor',
     render: (item) => formatCurrency(Number(item.amount)),
   },
-  { key: 'status', header: 'Status' },
+  {
+    key: 'commission_value',
+    header: 'Comissão',
+    render: (item) => {
+      const value = item.commission_value;
+      if (value === null || value === undefined || value === '') return '-';
+      return formatCurrency(Number(value));
+    },
+  },
+  {
+    key: 'processing_status',
+    header: 'Status',
+    render: () => <StatusBadge status="processed" />,
+  },
+  {
+    key: 'status',
+    header: 'Status Pagamento',
+    render: (item) => (
+      <StatusBadge status={String(item.payment_status || item.status || 'pending')} />
+    ),
+  },
 ];
 
 export function BatchDetail({ batchId }: BatchDetailProps) {
@@ -37,26 +79,50 @@ export function BatchDetail({ batchId }: BatchDetailProps) {
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
   const progress = useBatchProgress(batchId);
+  const finalSyncDoneRef = useRef(false);
+
+  const resolveFileUrl = useCallback((url: string) => {
+    if (!url) return '';
+    if (/^https?:\/\//i.test(url)) return url;
+    return `${API_BASE_URL}${url}`;
+  }, []);
+
+  const loadBatchDetail = useCallback(async () => {
+    const batchData = await api.get<ProposalBatch>(ENDPOINTS.BATCH_DETAIL(batchId));
+    setBatch(batchData);
+    return batchData;
+  }, [batchId]);
+
+  const loadProposals = useCallback(async (page = proposalPage) => {
+    const proposalData = await api.get<Proposal[] | PaginatedResponse<Proposal>>(
+      `${ENDPOINTS.BATCH_PROPOSALS(batchId)}?page=${page}`,
+    );
+    const results = Array.isArray(proposalData) ? proposalData : (proposalData?.results || []);
+    setProposals(results as unknown as Record<string, unknown>[]);
+    setTotalProposals(
+      Array.isArray(proposalData) ? results.length : (proposalData?.count ?? results.length),
+    );
+  }, [batchId, proposalPage]);
 
   useEffect(() => {
     async function load() {
       try {
-        const [batchData, proposalData] = await Promise.all([
-          api.get<ProposalBatch>(ENDPOINTS.BATCH_DETAIL(batchId)),
-          api.get<PaginatedResponse<Proposal>>(`${ENDPOINTS.BATCH_PROPOSALS(batchId)}?page=${proposalPage}`),
-        ]);
-        setBatch(batchData);
-        const results = Array.isArray(proposalData) ? proposalData : (proposalData?.results || []);
-        setProposals(results as unknown as Record<string, unknown>[]);
-        setTotalProposals(proposalData?.count || results.length);
+        await loadBatchDetail();
       } catch {
         toast.error('Erro ao carregar lote');
+        setLoading(false);
+        return;
+      }
+      try {
+        await loadProposals();
+      } catch {
+        toast.error('Erro ao carregar propostas do lote');
       } finally {
         setLoading(false);
       }
     }
     load();
-  }, [batchId, proposalPage]);
+  }, [batchId, proposalPage, loadBatchDetail, loadProposals]);
 
   // Update batch from WebSocket progress
   useEffect(() => {
@@ -66,34 +132,57 @@ export function BatchDetail({ batchId }: BatchDetailProps) {
           ? {
               ...prev,
               status: progress.status,
-              processed_rows: progress.processed_proposals,
-              errored_rows: progress.error_proposals,
-              total_rows: progress.total_proposals,
+              processed_rows: Math.max(prev.processed_rows || 0, progress.processed_proposals || 0),
+              errored_rows: Math.max(prev.errored_rows || 0, progress.error_proposals || 0),
+              total_rows: Math.max(prev.total_rows || 0, progress.total_proposals || 0),
             }
           : prev,
       );
+
+      if ((progress.status === 'completed' || progress.status === 'failed') && !finalSyncDoneRef.current) {
+        finalSyncDoneRef.current = true;
+        void loadBatchDetail();
+        void loadProposals();
+      }
+
+      if (progress.status === 'processing') {
+        finalSyncDoneRef.current = false;
+      }
     }
-  }, [progress]);
+  }, [progress, loadBatchDetail, loadProposals]);
 
   if (loading) return <PageSpinner />;
-  if (!batch) return <div className="text-center py-12 text-gray-400">Lote nao encontrado</div>;
+  if (!batch) return <div className="text-center py-12 text-gray-400">Lote não encontrado</div>;
 
   const progressPct = batch.total_rows > 0 ? (batch.processed_rows / batch.total_rows) * 100 : 0;
 
   const handleDeleteBatch = async () => {
-    if (!window.confirm('⚠️ Tem certeza que deseja deletar este lote? Isso não pode ser desfeito.')) {
+    if (
+      !window.confirm(
+        'Tem certeza que deseja excluir este lote?\n\n' +
+          'Serão removidos o lote, as propostas vinculadas, erros de importação ' +
+          'e comissões que ainda não foram pagas. Lotes com propostas pagas não podem ser excluídos.',
+      )
+    ) {
       return;
     }
 
     setDeleting(true);
     try {
-      await api.delete(ENDPOINTS.BATCH_DETAIL(batchId));
-      toast.success('Lote deletado com sucesso!');
-      // Redirecionar de volta para a lista de lotes
+      const res = await api.delete<{
+        detail?: string;
+        deleted_proposals?: number;
+        deleted_commissions?: number;
+      }>(ENDPOINTS.BATCH_DETAIL(batchId));
+      const proposals = res?.deleted_proposals ?? 0;
+      const commissions = res?.deleted_commissions ?? 0;
+      toast.success(
+        res?.detail ||
+          `Lote deletado (${proposals} proposta(s), ${commissions} comissão(ões) removidas).`,
+      );
       setTimeout(() => (window.location.href = `${window.location.origin}/proposals/batches`), 1000);
-    } catch (error: any) {
-      const errorMsg = error?.response?.data?.detail || 'Erro ao deletar lote';
-      toast.error(errorMsg);
+    } catch (error: unknown) {
+      toast.error(extractErrorMessage(error));
     } finally {
       setDeleting(false);
     }
@@ -101,11 +190,11 @@ export function BatchDetail({ batchId }: BatchDetailProps) {
 
   return (
     <div className="animate-fadeIn">
-      <div className="flex items-center gap-3 mb-6">
+      <div className="flex items-center gap-2 mb-4">
         <Button variant="ghost" size="sm" onClick={() => (window.location.href = `${window.location.origin}/proposals/batches`)}>
           <ArrowLeft size={16} />
         </Button>
-        <h1 className="text-2xl font-bold text-gray-900">Lote de Propostas</h1>
+        <h1 className="page-title">Lote de propostas</h1>
       </div>
 
       {/* Batch Info Card */}
@@ -125,19 +214,7 @@ export function BatchDetail({ batchId }: BatchDetailProps) {
           </div>
           <div>
             <p className="text-xs text-gray-400">Status</p>
-            <Badge
-              variant={
-                batch.status === 'completed'
-                  ? 'success'
-                  : batch.status === 'failed'
-                    ? 'error'
-                    : batch.status === 'processing'
-                      ? 'info'
-                      : 'warning'
-              }
-            >
-              {batch.status}
-            </Badge>
+            <StatusBadge status={batch.status} />
           </div>
         </div>
 
@@ -163,20 +240,39 @@ export function BatchDetail({ batchId }: BatchDetailProps) {
         )}
 
         {/* Stats */}
-        <div className="grid grid-cols-3 gap-4 mt-4">
+        <div className="grid grid-cols-4 gap-4 mt-4">
           <div className="text-center p-3 bg-gray-50 rounded-lg transition-all duration-300 hover:shadow-sm">
             <p className="text-2xl font-bold text-gray-900">{batch.total_rows}</p>
             <p className="text-xs text-gray-500">Total</p>
           </div>
-          <div className="text-center p-3 bg-green-50 rounded-lg transition-all duration-300 hover:shadow-sm">
-            <p className="text-2xl font-bold text-green-600">{batch.processed_rows}</p>
+          <div className="text-center p-3 bg-blue-50 rounded-lg transition-all duration-300 hover:shadow-sm">
+            <p className="text-2xl font-bold text-blue-700">{batch.processed_rows}</p>
             <p className="text-xs text-gray-500">Processadas</p>
+          </div>
+          <div className="text-center p-3 bg-green-50 rounded-lg transition-all duration-300 hover:shadow-sm">
+            <p className="text-2xl font-bold text-green-600">{batch.saved_count ?? Math.max(0, (batch.processed_rows || 0) - (batch.errored_rows || 0))}</p>
+            <p className="text-xs text-gray-500">Gravadas</p>
           </div>
           <div className="text-center p-3 bg-red-50 rounded-lg transition-all duration-300 hover:shadow-sm">
             <p className="text-2xl font-bold text-red-600">{batch.errored_rows}</p>
             <p className="text-xs text-gray-500">Erros</p>
           </div>
         </div>
+
+        {batch.error_summary && batch.error_summary.length > 0 && (
+          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4">
+            <p className="mb-2 text-sm font-semibold text-red-800">
+              Motivo dos erros ({batch.errored_rows})
+            </p>
+            <ul className="max-h-48 space-y-1 overflow-y-auto text-xs text-red-800">
+              {batch.error_summary.map((item, i) => (
+                <li key={i}>
+                  <strong>{item.count}×</strong> {item.error_message}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* Actions */}
         <div className="flex gap-2 mt-4">
@@ -186,7 +282,7 @@ export function BatchDetail({ batchId }: BatchDetailProps) {
             onClick={() => {
               try {
                 if (batch.original_file_url) {
-                  const fullUrl = `${API_BASE_URL}${batch.original_file_url}`;
+                  const fullUrl = resolveFileUrl(batch.original_file_url);
                   window.open(fullUrl, '_blank');
                 } else {
                   toast.error('Arquivo original não disponível');
@@ -198,7 +294,7 @@ export function BatchDetail({ batchId }: BatchDetailProps) {
             title="Baixar arquivo Excel original enviado"
           >
             <Download size={14} />
-            Download Original
+            Baixar original
           </Button>
 
           <Button
@@ -207,7 +303,7 @@ export function BatchDetail({ batchId }: BatchDetailProps) {
             onClick={() => {
               try {
                 if (batch.log_url) {
-                  const fullUrl = `${API_BASE_URL}${batch.log_url}`;
+                  const fullUrl = resolveFileUrl(batch.log_url);
                   window.open(fullUrl, '_blank');
                 } else {
                   toast.error('Log não disponível - sem erros no processamento');
@@ -220,7 +316,7 @@ export function BatchDetail({ batchId }: BatchDetailProps) {
             disabled={!batch.log_url}
           >
             <Download size={14} />
-            Download Log
+            Baixar log
           </Button>
 
           <Button
@@ -230,10 +326,10 @@ export function BatchDetail({ batchId }: BatchDetailProps) {
             loading={deleting}
             disabled={deleting}
             className="text-red-600 hover:bg-red-50 transition-all duration-300"
-            title="Deletar lote (só é possível se não tiver comissões geradas)"
+            title="Excluir lote (não permitido se houver propostas pagas)"
           >
             <Trash2 size={14} />
-            Deletar Lote
+            Excluir lote
           </Button>
         </div>
       </div>
@@ -262,7 +358,11 @@ export function BatchDetail({ batchId }: BatchDetailProps) {
             currentPage={proposalPage}
             onPageChange={setProposalPage}
             keyExtractor={(item) => item.id as string}
-            emptyMessage="Nenhuma proposta neste lote"
+            emptyMessage={
+              (batch.saved_count ?? 0) > 0
+                ? `${batch.saved_count} proposta(s) gravadas, mas a lista não carregou. Atualize a página.`
+                : 'Nenhuma proposta neste lote'
+            }
           />
         </div>
       )}

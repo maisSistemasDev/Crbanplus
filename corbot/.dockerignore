@@ -23,3 +23,7 @@ htmlcov/
 # Mídia e estáticos gerados localmente (o volume monta em produção)
 media/
 staticfiles/
+
+# Ambiente virtual local (a imagem cria o próprio via pip install)
+.venv/
+venv/

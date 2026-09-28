@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { CrudPage } from '../shared/CrudPage';
 import { ENDPOINTS } from '../../../../lib/api/endpoints';
-import { API_URL } from '../../../../lib/api/client';
+import { api, API_URL } from '../../../../lib/api/client';
 import { Badge } from '../../ui/Badge';
 import { Button } from '../../ui/Button';
+import { SearchSelect } from '../../ui/SearchSelect';
 import { TableCSVImport } from './TableCSVImport';
 import { TableRangesForm } from './TableRangesForm';
 import { Upload, Download } from 'lucide-react';
@@ -14,10 +15,33 @@ interface CommissionRange {
   min_value: string | number;
   max_value: string | number;
   commission_rate: string | number;
+  fixed_value?: string | number | null;
+}
+
+function formatRangeBounds(r: CommissionRange) {
+  if (Number(r.min_value) === 0 && Number(r.max_value) === 0) {
+    return '';
+  }
+  const min = Number(r.min_value).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+  const max = Number(r.max_value).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+  return `R$${min} – R$${max}`;
+}
+
+function formatRangeCommission(r: CommissionRange) {
+  if (r.fixed_value !== null && r.fixed_value !== undefined && r.fixed_value !== '') {
+    return `R$ ${Number(r.fixed_value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+  }
+  return `${r.commission_rate}%`;
 }
 
 const columns: Column<Record<string, unknown>>[] = [
   { key: 'name_in_bank', header: 'Nome no Banco', sortable: true },
+  {
+    key: 'code_in_bank',
+    header: 'Codigo da Tabela',
+    sortable: true,
+    render: (item) => String(item.code_in_bank || '-'),
+  },
   { key: 'bank_name', header: 'Banco', sortable: true },
   { key: 'agreement_name', header: 'Convênio', sortable: true },
   {
@@ -28,11 +52,15 @@ const columns: Column<Record<string, unknown>>[] = [
       if (!ranges || ranges.length === 0) return <span className="text-gray-400 text-xs">Sem faixas</span>;
       return (
         <div className="flex flex-col gap-0.5">
-          {ranges.map((r, i) => (
-            <span key={i} className="text-xs text-gray-700">
-              R${Number(r.min_value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} – R${Number(r.max_value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}: <strong>{r.commission_rate}%</strong>
-            </span>
-          ))}
+          {ranges.map((r, i) => {
+            const bounds = formatRangeBounds(r);
+            return (
+              <span key={i} className="text-xs text-gray-700">
+                {bounds ? <>{bounds}: </> : null}
+                <strong>{formatRangeCommission(r)}</strong>
+              </span>
+            );
+          })}
         </div>
       );
     },
@@ -51,6 +79,40 @@ const columns: Column<Record<string, unknown>>[] = [
 export function TableList() {
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [bankFilter, setBankFilter] = useState('');
+  const [agreementFilter, setAgreementFilter] = useState('');
+  const [codeFilter, setCodeFilter] = useState('');
+  const [banks, setBanks] = useState<{ id: string; name: string }[]>([]);
+  const [agreements, setAgreements] = useState<{ id: string; name: string }[]>([]);
+
+  const bankOptions = useMemo(() => banks.map((b) => ({ value: b.id, label: b.name })), [banks]);
+  const agreementOptions = useMemo(() => agreements.map((a) => ({ value: a.id, label: a.name })), [agreements]);
+
+  useEffect(() => {
+    api.get<{ id: string; name: string }[]>(ENDPOINTS.BANKS).then(setBanks).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const url = bankFilter ? `${ENDPOINTS.AGREEMENTS}?bank=${encodeURIComponent(bankFilter)}` : ENDPOINTS.AGREEMENTS;
+    api
+      .get<{ id: string; name: string }[] | { results: { id: string; name: string }[] }>(url)
+      .then((res) => {
+        const list = Array.isArray(res) ? res : res.results || [];
+        setAgreements(list);
+        setAgreementFilter((current) =>
+          current && list.some((item) => item.id === current) ? current : '',
+        );
+      })
+      .catch(() => setAgreements([]));
+  }, [bankFilter]);
+
+  const extraParams = useMemo(() => {
+    const p: Record<string, string> = {};
+    if (bankFilter) p.bank = bankFilter;
+    if (agreementFilter) p.agreement = agreementFilter;
+    if (codeFilter) p.code_in_bank = codeFilter;
+    return p;
+  }, [bankFilter, agreementFilter, codeFilter]);
 
   async function handleExportCSV() {
     try {
@@ -96,6 +158,34 @@ export function TableList() {
     </div>
   );
 
+  const filterBar = (
+    <>
+      <SearchSelect
+        className="w-full sm:w-52"
+        placeholder="Todos os bancos"
+        allowEmpty
+        value={bankFilter}
+        options={bankOptions}
+        onChange={(e) => setBankFilter(e.target.value)}
+      />
+      <SearchSelect
+        className="w-full sm:w-52"
+        placeholder="Todos os convênios"
+        allowEmpty
+        value={agreementFilter}
+        options={agreementOptions}
+        onChange={(e) => setAgreementFilter(e.target.value)}
+      />
+      <input
+        type="text"
+        value={codeFilter}
+        onChange={(e) => setCodeFilter(e.target.value)}
+        placeholder="Filtrar por código"
+        className="text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[var(--color-primary)] bg-white text-gray-700"
+      />
+    </>
+  );
+
   return (
     <>
       <CrudPage
@@ -107,6 +197,8 @@ export function TableList() {
         createLabel="Nova Tabela"
         searchPlaceholder="Buscar tabela..."
         customActions={customActions}
+        filterBar={filterBar}
+        extraParams={extraParams}
         selectable
         bulkDeleteEndpoint={ENDPOINTS.TABLES_BULK_DELETE}
         renderForm={({ item, onSubmit, onClose, saving }) => (

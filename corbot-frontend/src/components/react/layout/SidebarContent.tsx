@@ -1,17 +1,17 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useStore } from '@nanostores/react';
+import { getPendingTourTargetIds } from '../../../lib/tour/driver';
 import { $currentUser, clearAuth } from '../../../lib/stores/auth';
 import { $sidebarCollapsed, toggleSidebar } from '../../../lib/stores/sidebar';
 import { $theme } from '../../../lib/stores/theme';
 import { $whitelabel } from '../../../lib/stores/whitelabel';
-import { ROLE_LABELS } from '../../../lib/utils/roles';
+import { ROLE_LABELS, isPromotoraAdmin } from '../../../lib/utils/roles';
 import type { Role } from '../../../lib/utils/roles';
 import {
-  LayoutDashboard, Building2, Users, Landmark, FileSpreadsheet,
-  Coins, UsersRound, KeyRound, ChevronDown, ChevronRight,
-  CreditCard, LogOut, Wallet, Code2, BookOpen, Settings,
+  Building2, Users, ChevronDown, ChevronRight, LogOut, Wallet, FileSpreadsheet, Settings, Briefcase, LayoutDashboard,
 } from 'lucide-react';
 import clsx from 'clsx';
+import type { User } from '../../../lib/api/types';
 
 interface MenuItem {
   icon: React.ReactNode;
@@ -21,36 +21,50 @@ interface MenuItem {
   children?: { label: string; href: string; tourId?: string }[];
 }
 
-function getMenuItems(role: Role): MenuItem[] {
-  const iconSize = 20;
+function getMenuItems(user: User | null): MenuItem[] {
+  const iconSize = 18;
+  const role = (user?.role || 'vendedor') as Role;
+  const promotoraAdmin = isPromotoraAdmin(role, user?.company ?? null);
+  const isGerenteComercial = role === 'gerente_comercial';
 
-  const admin: MenuItem[] = [
-    { icon: <LayoutDashboard size={iconSize} />, label: 'Dashboard', href: '/dashboard' },
-    { icon: <Building2 size={iconSize} />, label: 'Corbans', href: '/companies' },
+  if (isGerenteComercial) {
+    return [
+      { icon: <LayoutDashboard size={iconSize} />, label: 'Dashboard', href: '/dashboard' },
+      {
+        icon: <FileSpreadsheet size={iconSize} />,
+        label: 'Propostas',
+        href: '/proposals',
+        children: [{ label: 'Minhas Propostas', href: '/proposals' }],
+      },
+      {
+        icon: <Users size={iconSize} />,
+        label: 'Cadastro',
+        href: '/cadastro',
+        children: [{ label: 'Corbans', href: '/users' }],
+      },
+      {
+        icon: <Wallet size={iconSize} />,
+        label: 'Financeiro',
+        href: '/financeiro',
+        children: [
+          { label: 'Comissões', href: '/commissions' },
+          { label: 'Pagamentos', href: '/payments' },
+        ],
+      },
+    ];
+  }
+
+  const items: MenuItem[] = [
     {
-      icon: <Users size={iconSize} />,
-      label: 'Usuarios',
-      href: '/users',
-      tourId: 'sidebar-users',
+      icon: <Building2 size={iconSize} />,
+      label: 'Administracao',
+      href: '/administracao',
       children: [
-        { label: 'Todos', href: '/users' },
-        { label: 'Vendedores', href: '/users/sellers' },
-        { label: 'Lideres', href: '/users/leaders' },
-        { label: 'Gerentes', href: '/users/managers' },
-        { label: 'Corbans', href: '/users/corbans' },
-        { label: 'Criar', href: '/users/create', tourId: 'create-user-link' },
-        { label: 'Importar CSV', href: '/users/import', tourId: 'import-csv-link' },
-      ],
-    },
-    {
-      icon: <Landmark size={iconSize} />,
-      label: 'Bancos',
-      href: '/banks',
-      tourId: 'sidebar-banks',
-      children: [
+        { label: 'Colaboradores', href: '/colaboradores' },
         { label: 'Bancos', href: '/banks' },
         { label: 'Convenios', href: '/agreements' },
-        { label: 'Tabelas', href: '/tables', tourId: 'tables-link' },
+        { label: 'Tabelas', href: '/tables' },
+        { label: 'Equipes', href: '/commission-groups' },
       ],
     },
     {
@@ -58,142 +72,77 @@ function getMenuItems(role: Role): MenuItem[] {
       label: 'Propostas',
       href: '/proposals',
       children: [
-        { label: 'Listagem', href: '/proposals' },
-        { label: 'Lotes', href: '/proposals/batches' },
-        { label: 'Upload', href: '/proposals/batches/upload' },
-        { label: 'Layouts', href: '/proposals/layouts' },
+        { label: 'Minhas Propostas', href: '/proposals' },
+        { label: 'Lotes de Importacao', href: '/proposals/batches' },
+        { label: 'Upload de Lote', href: '/proposals/batches/upload' },
+        { label: 'Layouts CSV', href: '/proposals/layouts' },
+        { label: 'Webhooks', href: '/proposals/webhooks' },
       ],
     },
-    {
-      icon: <Coins size={iconSize} />,
-      label: 'Comissoes',
-      href: '/commissions',
-      children: [
-        { label: 'Listagem', href: '/commissions' },
-        { label: 'Espelho', href: '/commissions/mirror' },
-        { label: 'Gerar', href: '/commissions/generate' },
-      ],
-    },
-    {
-      icon: <UsersRound size={iconSize} />,
-      label: 'Equipes',
-      href: '/commission-groups',
-      tourId: 'sidebar-commission-groups',
-      children: [
-        { label: 'Grupos', href: '/commission-groups' },
-        { label: 'Por Empresa', href: '/commission-groups/by-company' },
-      ],
-    },
-    { icon: <CreditCard size={iconSize} />, label: 'Pagamentos', href: '/payments' },
-    { icon: <KeyRound size={iconSize} />, label: 'Acessos', href: '/bank-access' },
-    { icon: <Settings size={iconSize} />, label: 'Configuracoes', href: '/settings' },
-    { icon: <Code2 size={iconSize} />, label: 'Desenvolvedor', href: '/developer' },
-    { icon: <BookOpen size={iconSize} />, label: 'Documentacao', href: '/docs' },
-  ];
-
-  const empresa_admin: MenuItem[] = [
-    { icon: <LayoutDashboard size={iconSize} />, label: 'Dashboard', href: '/dashboard' },
-    { icon: <Building2 size={iconSize} />, label: 'Minha Empresa', href: '/companies' },
     {
       icon: <Users size={iconSize} />,
-      label: 'Usuarios',
-      href: '/users',
+      label: 'Cadastro',
+      href: '/cadastro',
       children: [
-        { label: 'Todos', href: '/users' },
-        { label: 'Vendedores', href: '/users/sellers' },
-        { label: 'Lideres', href: '/users/leaders' },
-        { label: 'Gerentes', href: '/users/managers' },
-        { label: 'Corbans', href: '/users/corbans' },
-        { label: 'Criar', href: '/users/create' },
-        { label: 'Importar CSV', href: '/users/import' },
+        { label: 'Corbans', href: '/users' },
+        { label: 'Acessos', href: '/bank-access' },
       ],
     },
-    { icon: <Coins size={iconSize} />, label: 'Comissoes', href: '/commissions' },
     {
       icon: <Wallet size={iconSize} />,
-      label: 'Saques',
-      href: '/withdrawals/corbanpay',
+      label: 'Financeiro',
+      href: '/financeiro',
       children: [
-        { label: 'Saque CorbanPay', href: '/withdrawals/corbanpay' },
+        { label: 'Comissoes', href: '/commissions' },
+        { label: 'Pagamentos', href: '/payments' },
+        { label: 'Debitos', href: '/debitos' },
       ],
     },
-    { icon: <UsersRound size={iconSize} />, label: 'Equipes', href: '/commission-groups', tourId: 'sidebar-commission-groups' },
-    { icon: <CreditCard size={iconSize} />, label: 'Pagamentos', href: '/payments' },
-    { icon: <Settings size={iconSize} />, label: 'Configuracoes', href: '/settings' },
   ];
 
-  const gerente: MenuItem[] = [
-    { icon: <LayoutDashboard size={iconSize} />, label: 'Dashboard', href: '/dashboard' },
-    {
-      icon: <Users size={iconSize} />,
-      label: 'Usuarios',
-      href: '/users',
-      tourId: 'sidebar-users',
+  if (promotoraAdmin) {
+    items.push({
+      icon: <Briefcase size={iconSize} />,
+      label: 'Comercial',
+      href: '/commercial',
       children: [
-        { label: 'Vendedores', href: '/users/sellers' },
-        { label: 'Lideres', href: '/users/leaders' },
-        { label: 'Importar CSV', href: '/users/import', tourId: 'import-csv-link' },
+        { label: 'Gerentes', href: '/commercial/managers' },
+        { label: 'Equipes', href: '/commercial/teams' },
+        { label: 'Produção', href: '/commercial/production' },
       ],
-    },
-    { icon: <Coins size={iconSize} />, label: 'Comissoes', href: '/commissions' },
-    {
-      icon: <Wallet size={iconSize} />,
-      label: 'Saques',
-      href: '/withdrawals/corbanpay',
-      children: [
-        { label: 'Saque CorbanPay', href: '/withdrawals/corbanpay' },
-      ],
-    },
-    { icon: <UsersRound size={iconSize} />, label: 'Equipes', href: '/commission-groups' },
-    { icon: <CreditCard size={iconSize} />, label: 'Pagamentos', href: '/payments' },
-    { icon: <Settings size={iconSize} />, label: 'Configuracoes', href: '/settings' },
-  ];
+    });
+  }
 
-  const lider: MenuItem[] = [
-    { icon: <LayoutDashboard size={iconSize} />, label: 'Dashboard', href: '/dashboard' },
-    { icon: <Users size={iconSize} />, label: 'Minha Equipe', href: '/users/sellers' },
-    { icon: <Coins size={iconSize} />, label: 'Comissoes', href: '/commissions' },
-    {
-      icon: <Wallet size={iconSize} />,
-      label: 'Saques',
-      href: '/withdrawals/corbanpay',
-      children: [
-        { label: 'Saque CorbanPay', href: '/withdrawals/corbanpay' },
-      ],
-    },
-    { icon: <UsersRound size={iconSize} />, label: 'Equipes', href: '/commission-groups' },
-    { icon: <Settings size={iconSize} />, label: 'Configuracoes', href: '/settings' },
-  ];
+  items.push({
+    icon: <Settings size={iconSize} />,
+    label: 'Configurações',
+    href: '/settings',
+    children: [
+      { label: 'Integrador', href: '/settings' },
+      { label: 'Documentação', href: '/docs' },
+    ],
+  });
 
-  const vendedor: MenuItem[] = [
-    { icon: <LayoutDashboard size={iconSize} />, label: 'Dashboard', href: '/dashboard' },
-    { icon: <Coins size={iconSize} />, label: 'Minhas Comissoes', href: '/commissions' },
-    {
-      icon: <Wallet size={iconSize} />,
-      label: 'Saques',
-      href: '/withdrawals/corbanpay',
-      children: [
-        { label: 'Saque CorbanPay', href: '/withdrawals/corbanpay' },
-      ],
-    },
-    { icon: <Settings size={iconSize} />, label: 'Configuracoes', href: '/settings' },
-  ];
-
-  const menus: Record<Role, MenuItem[]> = { admin, empresa_admin, gerente, lider, vendedor };
-  return menus[role] || vendedor;
+  return items;
 }
 
 function SidebarItem({
   item,
   collapsed,
   currentPath,
+  tourTargetIds,
 }: {
   item: MenuItem;
   collapsed: boolean;
   currentPath: string;
+  tourTargetIds: Set<string>;
 }) {
-  const isActive = currentPath === item.href || item.children?.some((c) => currentPath === c.href);
-  const [open, setOpen] = useState(isActive);
+  const isActive =
+    currentPath === item.href ||
+    (item.children && item.href !== '/' && currentPath.startsWith(`${item.href}/`)) ||
+    item.children?.some((c) => currentPath === c.href || currentPath.startsWith(`${c.href}/`));
+  const childInTour = item.children?.some((c) => c.tourId && tourTargetIds.has(c.tourId)) ?? false;
+  const [open, setOpen] = useState(isActive || childInTour);
 
   if (item.children && !collapsed) {
     return (
@@ -202,7 +151,7 @@ function SidebarItem({
           onClick={() => setOpen(!open)}
           data-tour={item.tourId}
           className={clsx(
-            'w-full flex items-center gap-3 px-4 py-2.5 text-sm rounded-lg transition-colors',
+            'w-full flex items-center gap-2.5 px-3 py-2 text-sm rounded-lg transition-colors',
             isActive
               ? 'bg-[var(--color-sidebar-active)] text-white'
               : 'text-[var(--color-sidebar-text)] hover:bg-[var(--color-sidebar-hover)]',
@@ -220,7 +169,7 @@ function SidebarItem({
                 href={child.href}
                 data-tour={child.tourId}
                 className={clsx(
-                  'block px-3 py-2 text-sm rounded-lg transition-colors',
+                  'block px-2.5 py-1.5 text-xs rounded-lg transition-colors',
                   currentPath === child.href
                     ? 'bg-[var(--color-sidebar-active)] text-white'
                     : 'text-[var(--color-sidebar-text)] opacity-80 hover:opacity-100 hover:bg-[var(--color-sidebar-hover)]',
@@ -239,8 +188,9 @@ function SidebarItem({
     <a
       href={item.href}
       title={collapsed ? item.label : undefined}
+      data-tour={item.tourId}
       className={clsx(
-        'flex items-center gap-3 px-4 py-2.5 text-sm rounded-lg transition-colors',
+        'flex items-center gap-2.5 px-3 py-2 text-sm rounded-lg transition-colors',
         collapsed && 'justify-center',
         isActive
           ? 'bg-[var(--color-sidebar-active)] text-white'
@@ -259,7 +209,15 @@ export function SidebarContent() {
   const theme = useStore($theme);
   const config = useStore($whitelabel);
   const currentPath = typeof window !== 'undefined' ? window.location.pathname : '/';
-  const menuItems = getMenuItems((user?.role || 'vendedor') as Role);
+  const menuItems = getMenuItems(user);
+  const [tourTargetIds, setTourTargetIds] = useState(() => getPendingTourTargetIds());
+
+  useEffect(() => {
+    const refresh = () => setTourTargetIds(getPendingTourTargetIds());
+    refresh();
+    window.addEventListener('corbot-tour-updated', refresh);
+    return () => window.removeEventListener('corbot-tour-updated', refresh);
+  }, []);
 
   function handleLogout() {
     clearAuth();
@@ -275,7 +233,8 @@ export function SidebarContent() {
     >
       {/* Logo */}
       <div className={clsx(
-        'flex items-center h-14 px-4 border-b border-white/10',
+        'flex items-center px-3 border-b border-white/10',
+        'h-[var(--header-height)]',
         collapsed ? 'justify-center' : 'gap-3',
       )}>
         {(config.logoUrl || theme.logoUrl) ? (
@@ -285,7 +244,7 @@ export function SidebarContent() {
             {config.systemName.charAt(0).toUpperCase()}
           </div>
         )}
-        {!collapsed && <span className="text-white font-semibold text-lg">{config.systemName}</span>}
+        {!collapsed && <span className="text-white font-semibold text-sm">{config.systemName}</span>}
       </div>
 
       {/* Menu */}
@@ -296,6 +255,7 @@ export function SidebarContent() {
             item={item}
             collapsed={collapsed}
             currentPath={currentPath}
+            tourTargetIds={tourTargetIds}
           />
         ))}
       </nav>
@@ -316,7 +276,7 @@ export function SidebarContent() {
           onClick={handleLogout}
           title="Sair"
           className={clsx(
-            'flex items-center gap-3 px-4 py-2.5 text-sm rounded-lg transition-colors w-full',
+            'flex items-center gap-2.5 px-3 py-2 text-sm rounded-lg transition-colors w-full',
             'text-[var(--color-sidebar-text)] hover:bg-red-500/20 hover:text-red-300',
             collapsed && 'justify-center',
           )}

@@ -1,0 +1,9 @@
+---
+import DashboardLayout from '../../layouts/DashboardLayout.astro';
+import { EtlFlowEditorPage } from '../../components/react/domain/proposal-etl/EtlFlowPages';
+
+const { id } = Astro.params;
+---
+<DashboardLayout title="Editor ETL - CorbanPlus">
+  <EtlFlowEditorPage client:only="react" flowId={id!} />
+</DashboardLayout>

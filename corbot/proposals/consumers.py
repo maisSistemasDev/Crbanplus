@@ -132,12 +132,13 @@ class BatchProcessingConsumer(WebsocketConsumer):
         """
         Envia o status atual do lote para o cliente
         """
-        # Obter contagens de propostas
-        total_proposals = Proposal.objects.filter(batch=batch).count()
-        processed_proposals = Proposal.objects.filter(batch=batch, status='PROCESSED').count()
-        error_proposals = Proposal.objects.filter(batch=batch, status='ERROR').count()
-        success_proposals = Proposal.objects.filter(batch=batch, status='SUCCESS').count()
-        pending_proposals = Proposal.objects.filter(batch=batch, status='PENDING').count()
+        # Usa os totais persistidos no lote para evitar divergencias entre
+        # valores da tela e eventos de websocket apos refresh/reconexao.
+        total_proposals = max(batch.total_rows or 0, 0)
+        processed_proposals = max(batch.processed_rows or 0, 0)
+        error_proposals = max(batch.errored_rows or 0, 0)
+        success_proposals = max(processed_proposals - error_proposals, 0)
+        pending_proposals = max(total_proposals - processed_proposals, 0)
         
         # Calcular progresso
         progress = 0
@@ -160,8 +161,8 @@ class BatchProcessingConsumer(WebsocketConsumer):
             'status': batch.status,
             'created_at': batch.created_at.isoformat() if batch.created_at else None,
             'processing_started_at': batch.created_at.isoformat() if batch.created_at else None,
-            'processing_completed_at': batch.created_at.isoformat() if batch.created_at else None,
-            'file_name': batch.file.file.name,
+            'processing_completed_at': batch.processed_at.isoformat() if batch.processed_at else None,
+            'file_name': batch.file.file.name if batch.file and batch.file.file else None,
             'row_count': batch.total_rows,
             'total_proposals': total_proposals,
             'processed_proposals': processed_proposals,

@@ -22,6 +22,9 @@ class PaymentView(BaseApiView):
             payments = Payment.objects.all()
         elif user.role in (User.EMPRESA_ADMIN, User.GERENTE):
             payments = Payment.objects.filter(user__company=user.company)
+        elif user.role == User.GERENTE_COMERCIAL:
+            from commercial.services import team_company_ids_for
+            payments = Payment.objects.filter(user__company_id__in=team_company_ids_for(user))
         elif user.role == User.LIDER:
             payments = Payment.objects.filter(Q(user=user) | Q(user__leader=user))
         else:

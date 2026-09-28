@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../../../../lib/api/client';
 import { ENDPOINTS } from '../../../../lib/api/endpoints';
 import { Button } from '../../ui/Button';
@@ -6,8 +6,9 @@ import { Badge } from '../../ui/Badge';
 import { SearchInput } from '../../ui/SearchInput';
 import { PageSpinner } from '../../ui/Spinner';
 import clsx from 'clsx';
-import { Link, Unlink, Save, Play } from 'lucide-react';
+import { Link, Unlink, Save, Play, ChevronLeft, ChevronRight } from 'lucide-react';
 import toast from 'react-hot-toast';
+import type { PaginatedResponse } from '../../../../lib/api/types';
 
 // ===== Types =====
 
@@ -51,7 +52,7 @@ interface CategoryConfig {
 }
 
 const CATEGORIES: CategoryConfig[] = [
-  { key: 'users', label: 'Vendedores', relationKey: 'relation_users' },
+  { key: 'users', label: 'Digitadores / Acessos', relationKey: 'relation_users' },
   { key: 'agreements', label: 'Convenios', relationKey: 'relation_agreements' },
   { key: 'tables', label: 'Tabelas', relationKey: 'relation_tables' },
   { key: 'statuses', label: 'Status', relationKey: 'relation_statuses' },
@@ -63,6 +64,19 @@ const PAIR_COLORS = [
   'bg-indigo-500', 'bg-teal-500', 'bg-lime-500', 'bg-fuchsia-500',
   'bg-rose-500', 'bg-emerald-500', 'bg-violet-500', 'bg-amber-500',
 ];
+
+const ENTITY_PAGE_SIZE = 25;
+const SEARCH_DEBOUNCE_MS = 400;
+
+function extractList<T>(val: T[] | PaginatedResponse<T> | { results: T[] }): T[] {
+  if (Array.isArray(val)) return val;
+  return (val as PaginatedResponse<T>).results ?? [];
+}
+
+function extractCount<T>(val: T[] | PaginatedResponse<T>): number {
+  if (Array.isArray(val)) return val.length;
+  return (val as PaginatedResponse<T>).count ?? 0;
+}
 
 // ===== Component =====
 
@@ -78,10 +92,21 @@ export function ValueMatcher({ batchId, bankId, onProcessStart }: ValueMatcherPr
     tables: {}, users: {}, agreements: {}, statuses: {},
   });
 
-  // Options (system entities) per category
-  const [options, setOptions] = useState<Record<CategoryKey, OptionItem[]>>({
-    tables: [], users: [], agreements: [], statuses: [],
+  // Entidades do painel direito (paginado para users/tables)
+  const [entityOptions, setEntityOptions] = useState<OptionItem[]>([]);
+  const [entityTotal, setEntityTotal] = useState(0);
+  const [entityPage, setEntityPage] = useState(1);
+  const [entityOptionsLoading, setEntityOptionsLoading] = useState(false);
+
+  // Convênios e status (listas menores, carregadas uma vez)
+  const [staticOptions, setStaticOptions] = useState<{ agreements: OptionItem[]; statuses: OptionItem[] }>({
+    agreements: [],
+    statuses: [],
   });
+  const staticLoadedRef = useRef({ agreements: false, statuses: false });
+
+  // Cache de entidades já usadas no mapeamento (rótulos fora da página atual)
+  const [entityCache, setEntityCache] = useState<Record<string, OptionItem>>({});
 
   // Selection: which file value is selected (waiting for right-side click)
   const [selectedFileValue, setSelectedFileValue] = useState<string | null>(null);
@@ -89,6 +114,7 @@ export function ValueMatcher({ batchId, bankId, onProcessStart }: ValueMatcherPr
   // Search
   const [searchLeft, setSearchLeft] = useState('');
   const [searchRight, setSearchRight] = useState('');
+  const [searchRightDebounced, setSearchRightDebounced] = useState('');
 
   // ===== Data fetching =====
 
@@ -110,37 +136,91 @@ export function ValueMatcher({ batchId, bankId, onProcessStart }: ValueMatcherPr
     }
   }, [batchId]);
 
-  const fetchOptions = useCallback(async () => {
-    const [sellers, agreements, tables, statuses] = await Promise.allSettled([
-      api.get<OptionItem[] | { results: OptionItem[] }>(ENDPOINTS.SELLERS),
-      api.get<OptionItem[] | { results: OptionItem[] }>(ENDPOINTS.AGREEMENTS),
-      api.get<OptionItem[] | { results: OptionItem[] }>(`${ENDPOINTS.TABLES}?bank=${bankId}`),
-      api.get<OptionItem[] | { results: OptionItem[] }>(`${ENDPOINTS.STATUS_PAYMENT}?bank_id=${bankId}`),
-    ]);
-    const extract = (r: PromiseSettledResult<OptionItem[] | { results: OptionItem[] }>): OptionItem[] => {
-      if (r.status === 'rejected') return [];
-      const val = r.value;
-      return Array.isArray(val) ? val : (val as any).results || [];
-    };
-    setOptions({
-      users: extract(sellers), agreements: extract(agreements),
-      tables: extract(tables), statuses: extract(statuses),
-    });
+  const usesServerEntitySearch = activeTab === 'users' || activeTab === 'tables';
+
+  const fetchStaticOptions = useCallback(async (category: 'agreements' | 'statuses') => {
+    if (staticLoadedRef.current[category]) return;
+    try {
+      if (category === 'agreements') {
+        const res = await api.get<OptionItem[] | PaginatedResponse<OptionItem>>(ENDPOINTS.AGREEMENTS);
+        setStaticOptions((prev) => ({ ...prev, agreements: extractList(res) }));
+      } else {
+        const res = await api.get<OptionItem[] | PaginatedResponse<OptionItem>>(
+          `${ENDPOINTS.STATUS_PAYMENT}?bank_id=${bankId}`,
+        );
+        setStaticOptions((prev) => ({ ...prev, statuses: extractList(res) }));
+      }
+      staticLoadedRef.current[category] = true;
+    } catch {
+      toast.error(category === 'agreements' ? 'Erro ao carregar convênios' : 'Erro ao carregar status');
+    }
   }, [bankId]);
+
+  const fetchEntityOptions = useCallback(async () => {
+    if (activeTab === 'agreements' || activeTab === 'statuses') {
+      await fetchStaticOptions(activeTab);
+      return;
+    }
+
+    setEntityOptionsLoading(true);
+    try {
+      const params = new URLSearchParams({
+        page: String(entityPage),
+        page_size: String(ENTITY_PAGE_SIZE),
+      });
+      if (searchRightDebounced) params.set('search', searchRightDebounced);
+
+      let res: OptionItem[] | PaginatedResponse<OptionItem>;
+      if (activeTab === 'users') {
+        res = await api.get<OptionItem[] | PaginatedResponse<OptionItem>>(`${ENDPOINTS.SELLERS}?${params}`);
+      } else {
+        params.set('bank', bankId);
+        res = await api.get<OptionItem[] | PaginatedResponse<OptionItem>>(`${ENDPOINTS.TABLES}?${params}`);
+      }
+
+      setEntityOptions(extractList(res));
+      setEntityTotal(extractCount(res));
+    } catch {
+      setEntityOptions([]);
+      setEntityTotal(0);
+      toast.error('Erro ao carregar entidades');
+    } finally {
+      setEntityOptionsLoading(false);
+    }
+  }, [activeTab, bankId, entityPage, searchRightDebounced, fetchStaticOptions]);
 
   useEffect(() => {
     (async () => {
       setLoading(true);
-      await Promise.all([fetchPreview(), fetchOptions()]);
+      await fetchPreview();
       setLoading(false);
     })();
-  }, [fetchPreview, fetchOptions]);
+  }, [fetchPreview]);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setSearchRightDebounced(searchRight);
+      setEntityPage(1);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [searchRight]);
+
+  useEffect(() => {
+    if (loading || !preview) return;
+    fetchEntityOptions();
+  }, [loading, preview, fetchEntityOptions]);
 
   // Reset selection on tab change
   useEffect(() => {
     setSelectedFileValue(null);
     setSearchLeft('');
     setSearchRight('');
+    setSearchRightDebounced('');
+    setEntityPage(1);
+    if (activeTab === 'users' || activeTab === 'tables') {
+      setEntityOptions([]);
+      setEntityTotal(0);
+    }
   }, [activeTab]);
 
   // ===== Helpers =====
@@ -159,7 +239,9 @@ export function ValueMatcher({ batchId, bankId, onProcessStart }: ValueMatcherPr
   }
 
   function getMappedEntityName(entityId: string): string {
-    const opt = options[activeTab].find((o) => String(o.id) === entityId);
+    const cached = entityCache[entityId];
+    if (cached) return getOptionLabel(activeTab, cached);
+    const opt = entityOptions.find((o) => String(o.id) === entityId);
     if (opt) return getOptionLabel(activeTab, opt);
     const cat = CATEGORIES.find((c) => c.key === activeTab)!;
     const item = preview?.[cat.relationKey].find((i) => String(i.id) === entityId);
@@ -197,8 +279,11 @@ export function ValueMatcher({ batchId, bankId, onProcessStart }: ValueMatcherPr
     }
   }
 
-  function handleEntityClick(entityId: string) {
+  function handleEntityClick(entityId: string, entity?: OptionItem) {
     if (!selectedFileValue) return;
+    if (entity) {
+      setEntityCache((prev) => ({ ...prev, [entityId]: entity }));
+    }
     // Multiple file values CAN map to the same entity (N:1)
     setMappings((prev) => ({
       ...prev,
@@ -231,13 +316,12 @@ export function ValueMatcher({ batchId, bankId, onProcessStart }: ValueMatcherPr
   }
 
   async function handleSave() {
-    if (!preview) return;
+    if (!preview) return false;
     setSaving(true);
     try {
       const promises: Promise<unknown>[] = [];
       const am = buildRelationships('agreements', preview.relation_agreements);
       if (am.length) promises.push(api.post(ENDPOINTS.AGREEMENT_NAMES, { relationships: am }));
-      // Tables: always send if there are file values (backend clears all aliases first)
       if (preview.relation_tables.length > 0) {
         const tm = buildRelationships('tables', preview.relation_tables);
         promises.push(api.post(ENDPOINTS.TABLE_NAMES, { bank_id: bankId, relationships: tm }));
@@ -250,16 +334,21 @@ export function ValueMatcher({ batchId, bankId, onProcessStart }: ValueMatcherPr
       await Promise.all(promises);
       toast.success('Mapeamentos salvos!');
       await fetchPreview();
+      return true;
     } catch {
       toast.error('Erro ao salvar mapeamentos');
+      return false;
     } finally {
       setSaving(false);
     }
   }
 
   async function handleProcess() {
+    if (!preview) return;
     setProcessing(true);
     try {
+      const saved = await handleSave();
+      if (!saved) return;
       await api.upload(ENDPOINTS.BATCH_DETAIL(batchId), new FormData(), 'PUT');
       toast.success('Processamento iniciado!');
       onProcessStart();
@@ -277,15 +366,30 @@ export function ValueMatcher({ batchId, bankId, onProcessStart }: ValueMatcherPr
 
   const activeCat = CATEGORIES.find((c) => c.key === activeTab)!;
   const fileValues = preview[activeCat.relationKey];
-  const entityList = options[activeTab];
   const catMappings = mappings[activeTab];
+
+  const staticEntityList = activeTab === 'agreements'
+    ? staticOptions.agreements
+    : activeTab === 'statuses'
+      ? staticOptions.statuses
+      : entityOptions;
 
   const filteredLeft = fileValues.filter((i) =>
     i.name_in_bank.toLowerCase().includes(searchLeft.toLowerCase()),
   );
-  const filteredRight = entityList.filter((i) =>
-    getOptionLabel(activeTab, i).toLowerCase().includes(searchRight.toLowerCase()),
-  );
+
+  const filteredRight = (() => {
+    if (usesServerEntitySearch) return entityOptions;
+    const q = searchRight.toLowerCase();
+    if (!q) return staticEntityList;
+    return staticEntityList.filter((i) =>
+      getOptionLabel(activeTab, i).toLowerCase().includes(q),
+    );
+  })();
+
+  const entityPageCount = usesServerEntitySearch
+    ? Math.max(1, Math.ceil(entityTotal / ENTITY_PAGE_SIZE))
+    : 1;
 
   const totalPending = CATEGORIES.reduce((acc, cat) => {
     return acc + preview[cat.relationKey].filter((i) => !mappings[cat.key][i.name_in_bank]).length;
@@ -409,9 +513,18 @@ export function ValueMatcher({ batchId, bankId, onProcessStart }: ValueMatcherPr
               </p>
             </div>
             <div className="px-3 py-2 border-b border-gray-100">
-              <SearchInput value={searchRight} onChange={setSearchRight} placeholder="Buscar entidade..." />
+              <SearchInput
+                value={searchRight}
+                onChange={setSearchRight}
+                placeholder={usesServerEntitySearch ? 'Buscar por nome, CPF, e-mail...' : 'Buscar entidade...'}
+              />
             </div>
-            <div className="divide-y divide-gray-50 max-h-[420px] overflow-y-auto">
+            <div className="divide-y divide-gray-50 max-h-[420px] overflow-y-auto relative">
+              {entityOptionsLoading && usesServerEntitySearch && (
+                <div className="absolute inset-0 bg-white/60 flex items-center justify-center z-10">
+                  <PageSpinner />
+                </div>
+              )}
               {filteredRight.map((entity) => {
                 const entityId = String(entity.id);
                 const pairedFileValues = getFileValuesForEntity(entityId);
@@ -423,7 +536,7 @@ export function ValueMatcher({ batchId, bankId, onProcessStart }: ValueMatcherPr
                 return (
                   <button
                     key={entityId}
-                    onClick={() => handleEntityClick(entityId)}
+                    onClick={() => handleEntityClick(entityId, entity)}
                     disabled={!canSelect}
                     className={clsx(
                       'w-full px-4 py-3 text-left flex items-center gap-3 transition-colors',
@@ -457,12 +570,40 @@ export function ValueMatcher({ batchId, bankId, onProcessStart }: ValueMatcherPr
                   </button>
                 );
               })}
-              {filteredRight.length === 0 && (
+              {!entityOptionsLoading && filteredRight.length === 0 && (
                 <div className="px-4 py-8 text-center text-sm text-gray-400">
                   {searchRight ? 'Nenhum resultado' : 'Nenhuma entidade disponivel'}
                 </div>
               )}
             </div>
+            {usesServerEntitySearch && entityTotal > 0 && (
+              <div className="px-3 py-2 border-t border-gray-100 flex items-center justify-between gap-2 bg-gray-50">
+                <span className="text-xs text-gray-500">
+                  {entityTotal} resultado{entityTotal !== 1 ? 's' : ''}
+                  {entityPageCount > 1 && ` · Página ${entityPage} de ${entityPageCount}`}
+                </span>
+                <div className="flex gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={entityPage <= 1 || entityOptionsLoading}
+                    onClick={() => setEntityPage((p) => Math.max(1, p - 1))}
+                    aria-label="Página anterior"
+                  >
+                    <ChevronLeft size={16} />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={entityPage >= entityPageCount || entityOptionsLoading}
+                    onClick={() => setEntityPage((p) => p + 1)}
+                    aria-label="Próxima página"
+                  >
+                    <ChevronRight size={16} />
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

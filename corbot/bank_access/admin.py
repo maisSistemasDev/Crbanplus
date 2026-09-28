@@ -4,7 +4,7 @@ from .models import BankAccess, AccessLog
 
 @admin.register(BankAccess)
 class BankAccessAdmin(admin.ModelAdmin):
-    list_display = ('username', 'bank', 'user', 'is_active')
+    list_display = ('username', 'bank', 'user', 'is_master', 'is_active')
     list_filter = ('is_active', 'bank')
     search_fields = ('username', 'bank__name', 'user__first_name', 
                     'user__last_name', 'user__cpf')

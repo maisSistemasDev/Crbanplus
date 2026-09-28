@@ -52,7 +52,7 @@ def clean_nan_values(data):
     elif hasattr(data, 'dtype') and 'datetime' in str(data.dtype):
         # Trata objetos numpy datetime
         try:
-            return pd.to_datetime(data).isoformat()
+            return pd.to_datetime(data, dayfirst=True).isoformat()
         except Exception:
             return str(data)
     elif hasattr(data, 'timestamp'):
@@ -73,31 +73,17 @@ def clean_nan_values(data):
         return data
 
 def get_table(name_in_bank, value):
-    from decimal import Decimal
-    amount = Decimal(str(value))
-
-    def _table_covers_amount(tb):
-        ranges = list(tb.commission_ranges.order_by('min_value'))
-        if ranges:
-            return any(cr.min_value <= amount <= cr.max_value for cr in ranges)
-        # fallback legado
-        if tb.min_value is None and tb.max_value is None:
-            return True
-        min_v = tb.min_value or Decimal('0')
-        max_v = tb.max_value or Decimal('0')
-        return (min_v <= amount <= max_v) or (max_v == 0 and min_v == 0)
-
     table = Table.objects.filter(name_in_bank=name_in_bank)
     if table.count() == 0:
         for tb in Table.objects.all():
-            for alias in tb.alias:
+            for alias in tb.alias or []:
                 if alias.lower().strip() == name_in_bank.lower().strip():
-                    if _table_covers_amount(tb):
+                    if tb.covers_amount(value):
                         return tb
         raise Exception(f'Tabela não encontrada: {name_in_bank}')
     else:
         for t in table:
-            if _table_covers_amount(t):
+            if t.covers_amount(value):
                 return t
         raise Exception(f'Tabela não encontrada: {name_in_bank}')
 
@@ -125,19 +111,17 @@ def get_agreement(name):
 def get_user(login):
     if not login or login == 'nan':
         raise Exception(f'Vendedor não encontrado: {login}')
-        
+
+    from bank_access.services import login_values_match
+
     value = str(login).strip()
-    emails = extract_emails(value)
-    value = emails[0].lower() if len(emails) > 0 else value.lower()
-    bank_access = BankAccess.objects.filter(username=value).first()
-    if bank_access:
-        return bank_access.user
-    else:
-        for alias in BankAccess.objects.all():
-            for alias_value in alias.alias:
-                if alias_value.lower().strip() == value.lower().strip():
-                    return alias.user
-        raise Exception(f'Vendedor não encontrado: {login}')
+    for access in BankAccess.objects.select_related('user').all():
+        if login_values_match(value, access.username):
+            return access.user
+        for alias_value in access.alias or []:
+            if login_values_match(value, alias_value):
+                return access.user
+    raise Exception(f'Vendedor não encontrado: {login}')
             
 
 def save_errored_proposal(proposal, error_message, batch):

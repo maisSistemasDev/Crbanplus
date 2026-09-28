@@ -1,10 +1,7 @@
 ---
-import DashboardLayout from '@/layouts/DashboardLayout.astro';
-import PermissionManager from '@/components/react/domain/internal-users/PermissionManager';
-
 const { id } = Astro.params;
+if (id) {
+  return Astro.redirect(`/colaboradores/${id}/permissions`);
+}
+return Astro.redirect('/colaboradores');
 ---
-
-<DashboardLayout title="Gerenciar Permissões - CorbanPlus">
-  <PermissionManager client:load userId={id} />
-</DashboardLayout>

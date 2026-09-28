@@ -68,12 +68,43 @@ class ProposalBatch(TimeStampedModel):
     errored_rows = models.IntegerField(verbose_name=_("Linhas com erro"), default=0)
     total_rows = models.IntegerField(verbose_name=_("Total de linhas"), default=0)
     task_id = models.CharField(verbose_name=_("ID da tarefa Celery"), max_length=255, null=True, blank=True)
+    etl_run = models.ForeignKey(
+        'proposal_etl.ProposalEtlRun',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='batches',
+        verbose_name=_('execução ETL'),
+    )
+
     def __str__(self):
         return f"{self.file.file.name} - {self.layout.bank.name} - {self.layout.map_fields.count()} fields"
 
 class Proposal(TimeStampedModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    seller = models.ForeignKey(verbose_name=_("Vendedor"), to=User, on_delete=models.CASCADE)
+    seller = models.ForeignKey(
+        verbose_name=_("Vendedor"),
+        to=User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='proposals_as_seller',
+    )
+    digitador = models.CharField(
+        verbose_name=_("Digitador"),
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text=_("Nome do digitador informado no arquivo de proposta."),
+    )
+    bank_access = models.ForeignKey(
+        'bank_access.BankAccess',
+        verbose_name=_("Acesso bancário"),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='proposals',
+    )
     contract_number = models.CharField(verbose_name=_("Número do contrato"), max_length=255, unique=True)
     company = models.ForeignKey(verbose_name=_("Empresa"), to=Company, on_delete=models.CASCADE)
     bank = models.ForeignKey(verbose_name=_("Banco"), to=Bank, on_delete=models.CASCADE)

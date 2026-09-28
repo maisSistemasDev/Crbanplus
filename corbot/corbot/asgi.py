@@ -21,7 +21,10 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'corbot.settings')
 django_asgi_app = get_asgi_application()
 
 # Importa as configurações de roteamento WebSocket
-from proposals.routing import websocket_urlpatterns
+from proposals.routing import websocket_urlpatterns as proposals_ws
+from ai_agent.routing import websocket_urlpatterns as ai_ws
+
+websocket_urlpatterns = proposals_ws + ai_ws
 
 application = ProtocolTypeRouter(
     {

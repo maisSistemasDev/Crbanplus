@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '@nanostores/react';
 import { PageShell } from '../../layout/PageShell';
+import { PageHeader } from '../../ui/PageHeader';
 import { Button } from '../../ui/Button';
+import { SearchSelect } from '../../ui/SearchSelect';
 import { api } from '../../../../lib/api/client';
 import { ENDPOINTS } from '../../../../lib/api/endpoints';
 import { $currentUser, updateCurrentUser } from '../../../../lib/stores/auth';
@@ -47,6 +49,11 @@ const PIX_TYPE_OPTIONS = [
   { value: 'CPF', label: 'CPF' },
   { value: 'CNPJ', label: 'CNPJ' },
 ] as const;
+
+const AI_PROVIDER_OPTIONS = [
+  { value: 'openai', label: 'OpenAI (ChatGPT)' },
+  { value: 'anthropic', label: 'Anthropic (Claude)' },
+];
 
 function buildProfileForm(user: User): ProfileForm {
   return {
@@ -234,15 +241,17 @@ export function SettingsPage() {
   return (
     <PageShell>
       <div className="max-w-4xl mx-auto space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900">Configuracoes</h1>
-          <Button variant="ghost" size="sm" onClick={refreshCurrentUser} loading={profileLoading}>
-            Atualizar dados
-          </Button>
-        </div>
+        <PageHeader
+          title="Configurações"
+          actions={
+            <Button variant="ghost" size="sm" onClick={refreshCurrentUser} loading={profileLoading}>
+              Atualizar dados
+            </Button>
+          }
+        />
 
         <div className="bg-white border border-gray-100 rounded-xl p-6 space-y-5">
-          <h2 className="text-lg font-semibold text-gray-900">Perfil</h2>
+          <h2 className="section-title">Perfil</h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <label className="space-y-1">
@@ -281,11 +290,11 @@ export function SettingsPage() {
             </label>
             <label className="space-y-1">
               <span className="text-sm text-gray-600">Tipo de PIX</span>
-              <select className="w-full rounded-lg border border-gray-300 px-3 py-2" value={profileForm.pix_type} onChange={(e) => updateProfileField('pix_type', e.target.value as ProfileForm['pix_type'])}>
-                {PIX_TYPE_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
+              <SearchSelect
+                value={profileForm.pix_type}
+                options={PIX_TYPE_OPTIONS}
+                onChange={(e) => updateProfileField('pix_type', e.target.value as ProfileForm['pix_type'])}
+              />
             </label>
             <label className="space-y-1 md:col-span-2">
               <span className="text-sm text-gray-600">Chave PIX</span>
@@ -340,7 +349,7 @@ export function SettingsPage() {
 
         {isPromotoraAdmin && (
           <div className="bg-white border border-gray-100 rounded-xl p-6 space-y-4">
-            <h2 className="text-lg font-semibold text-gray-900">Integracao CorbanPay</h2>
+            <h2 className="section-title">Integração CorbanPay</h2>
 
             <label className="space-y-1 block">
               <span className="text-sm text-gray-600">URL base</span>
@@ -382,22 +391,19 @@ export function SettingsPage() {
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-indigo-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">Agente IA</h2>
+                <h2 className="section-title">Agente IA</h2>
                 <p className="text-xs text-gray-500">Chave configurada aqui é usada por todos os usuários da promotora.</p>
               </div>
             </div>
 
             <label className="space-y-1 block">
               <span className="text-sm text-gray-600">Provedor</span>
-              <select
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              <SearchSelect
                 value={aiProvider}
+                options={AI_PROVIDER_OPTIONS}
                 onChange={(e) => setAiProvider(e.target.value as 'openai' | 'anthropic')}
                 disabled={aiLoading}
-              >
-                <option value="openai">OpenAI (ChatGPT)</option>
-                <option value="anthropic">Anthropic (Claude)</option>
-              </select>
+              />
             </label>
 
             <label className="space-y-1 block">

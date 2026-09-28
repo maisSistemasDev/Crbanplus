@@ -5,8 +5,9 @@ from django.db.utils import IntegrityError
 from django.http import HttpResponse
 
 from ..base_views import BaseApiView
-from ..models import User, ExtraData, Company
+from ..models import User, ExtraData, Company, validate_pix_binding
 from ..permissions import IsGerente, IsGerenteOrLider, IsAdmin
+from ..utils import normalize_cpf
 
 
 class VendedorImportView(BaseApiView):
@@ -86,9 +87,10 @@ class VendedorImportView(BaseApiView):
         for index, item in enumerate(data):
             try:
                 with transaction.atomic():
-                    # Obtém os dados do vendedor
+                    # Obtém os dados do vendedor (normaliza CPF para preservar
+                    # zeros à esquerda perdidos pelo Excel/pandas).
                     user_data = {
-                        'cpf': item.get('cpf'),
+                        'cpf': normalize_cpf(item.get('cpf')),
                         'email': item.get('email'),
                         'first_name': item.get('first_name'),
                         'last_name': item.get('last_name', ''),
@@ -99,6 +101,7 @@ class VendedorImportView(BaseApiView):
                     # Trata o líder
                     leader_cpf = item.get('leader_cpf')
                     if leader_cpf:
+                        leader_cpf = normalize_cpf(leader_cpf)
                         try:
                             leader = User.objects.get(cpf=leader_cpf, role=User.LIDER)
                             user_data['leader'] = leader
@@ -122,6 +125,15 @@ class VendedorImportView(BaseApiView):
                     # Verificação adicional para garantir que os campos de PIX estejam presentes
                     if 'pix_key' not in extra_data or 'pix_type' not in extra_data:
                         raise ValueError("Os campos 'pix_key' e 'pix_type' são obrigatórios")
+
+                    pix_error = validate_pix_binding(
+                        pix_type=extra_data.get('pix_type'),
+                        pix_key=extra_data.get('pix_key'),
+                        cpf=user.cpf,
+                        cnpj=user.company.document if user.company else None,
+                    )
+                    if pix_error:
+                        raise ValueError(pix_error)
                     
                     ExtraData.objects.create(user=user, **extra_data)
                     

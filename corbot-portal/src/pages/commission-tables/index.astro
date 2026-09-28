@@ -1,0 +1,10 @@
+---
+import PortalLayout from '../../layouts/PortalLayout.astro';
+import { AppShell } from '../../components/react/layout/AppShell';
+import { CommissionTableSearch } from '../../components/react/domain/commissions/CommissionTableSearch';
+---
+<PortalLayout title="Comissões - Portal Corban">
+  <AppShell client:only="react">
+    <CommissionTableSearch client:only="react" />
+  </AppShell>
+</PortalLayout>

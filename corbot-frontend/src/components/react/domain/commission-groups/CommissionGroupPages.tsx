@@ -1,7 +1,6 @@
 import { PageShell } from '../../layout/PageShell';
 import { CommissionGroupList } from './CommissionGroupList';
 import { CompanyGroupList } from './CompanyGroupList';
-import { CompanyGroupDetail } from './CompanyGroupDetail';
 import { TeamBuilder } from './TeamBuilder';
 
 export function CommissionGroupListPage() {
@@ -20,10 +19,11 @@ export function CompanyGroupListPage() {
   );
 }
 
+/** @deprecated Use TeamBuilderPage — grupos por Corban usam /commission-groups/{id} */
 export function CompanyGroupDetailPage({ groupId }: { groupId: number }) {
   return (
     <PageShell>
-      <CompanyGroupDetail groupId={groupId} />
+      <TeamBuilder groupId={groupId} />
     </PageShell>
   );
 }

@@ -47,6 +47,8 @@ class ProposalBatchSerializer(serializers.ModelSerializer):
     layout_name = serializers.SerializerMethodField()
     name = serializers.SerializerMethodField()
     commissions_to_generate = serializers.SerializerMethodField()
+    error_summary = serializers.SerializerMethodField()
+    saved_count = serializers.SerializerMethodField()
     
     class Meta:
         model = ProposalBatch
@@ -125,6 +127,29 @@ class ProposalBatchSerializer(serializers.ModelSerializer):
         except Exception:
             return 0
 
+    def get_error_summary(self, obj: ProposalBatch):
+        """Agrupa mensagens de erro do lote para exibir na tela."""
+        try:
+            from django.db.models import Count
+            rows = list(
+                ErroredProposal.objects.filter(batch=obj)
+                .values('error_message')
+                .annotate(count=Count('id'))
+                .order_by('-count')[:30]
+            )
+            return [
+                {'error_message': row['error_message'] or 'Erro desconhecido', 'count': row['count']}
+                for row in rows
+            ]
+        except Exception:
+            return []
+
+    def get_saved_count(self, obj: ProposalBatch):
+        try:
+            return Proposal.objects.filter(batch=obj).count()
+        except Exception:
+            return 0
+
 class ErroredProposalSerializer(serializers.ModelSerializer):
     class Meta:
         model = ErroredProposal
@@ -155,14 +180,75 @@ class UserSerializer(serializers.ModelSerializer):
 
 class ProposalSerializer(serializers.ModelSerializer):
     commissions = serializers.SerializerMethodField()
+    commission_value = serializers.SerializerMethodField()
+    payment_status = serializers.SerializerMethodField()
+    payment_status_display = serializers.SerializerMethodField()
     seller_details = serializers.SerializerMethodField()
+    bank_access_details = serializers.SerializerMethodField()
     company_details = serializers.SerializerMethodField()
     bank_details = serializers.SerializerMethodField()
     agreement_details = serializers.SerializerMethodField()
     table_details = serializers.SerializerMethodField()
+    claim_details = serializers.SerializerMethodField()
+
+    _RELEASE_STATUS_LABELS = dict(Commission.RELEASE_STATUS_CHOICES)
+    _RELEASE_PRIORITY = {
+        Commission.PAID: 4,
+        Commission.PENDING_MANUAL_PAYMENT: 3,
+        Commission.WITHDRAW_AVAILABLE: 2,
+        Commission.NOT_RELEASED: 1,
+        # Comissão anulada por sinistro não define mais o status da proposta.
+        Commission.SINISTRO: 0,
+    }
+
+    def _proposal_commissions(self, obj):
+        return list(obj.commissions.all())
+
+    def _viewer_commissions(self, obj):
+        commissions = self._proposal_commissions(obj)
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        if not user or not getattr(user, 'is_authenticated', False):
+            return commissions
+        # Empresa/gerente vê o pagamento da operação (comissões da proposta).
+        # Vendedor/líder vê só a comissão dele.
+        if getattr(user, 'is_vendedor', False) or getattr(user, 'is_lider', False):
+            return [c for c in commissions if c.user_id == user.id]
+        return commissions
+
+    def _chosen_commission(self, obj):
+        commissions = self._viewer_commissions(obj)
+        if not commissions:
+            return None
+        return max(commissions, key=lambda c: self._RELEASE_PRIORITY.get(c.release_status, 0))
+
+    def get_payment_status(self, obj):
+        commission = self._chosen_commission(obj)
+        if not commission:
+            return Commission.NOT_RELEASED
+        return commission.release_status
+
+    def get_payment_status_display(self, obj):
+        return self._RELEASE_STATUS_LABELS.get(self.get_payment_status(obj), 'Pendente')
+
+    def get_claim_details(self, obj):
+        claims = list(obj.claims.all())
+        if not claims:
+            return None
+        claim = max(claims, key=lambda c: (c.created_at, c.id))
+        return {
+            'id': claim.id,
+            'claim_type': claim.claim_type,
+            'claim_type_display': claim.get_claim_type_display(),
+            'amount': claim.amount,
+            'created_at': claim.created_at,
+            'charged_company_name': claim.charged_company.name if claim.charged_company else None,
+            'correct_company_name': claim.correct_company.name if claim.correct_company else None,
+            'total': len(claims),
+        }
 
     def get_commissions(self, obj):
-        commission = Commission.objects.filter(proposal=obj).first()
+        commission = self._chosen_commission(obj)
         if commission:
             return {
                 'id': commission.id,
@@ -172,13 +258,35 @@ class ProposalSerializer(serializers.ModelSerializer):
                 'percentage': commission.percentage,
                 'value': commission.value,
                 'table': commission.commission_config.table_config if commission.commission_config else None,
-                'payment': commission.payment.id if commission.payment else None
+                'payment': commission.payment.id if commission.payment else None,
+                'release_status': commission.release_status,
+                'paid_at': commission.paid_at,
             }
         return None
 
+    def get_commission_value(self, obj):
+        commissions = self._viewer_commissions(obj)
+        if not commissions:
+            return None
+        total = sum((c.value or 0) for c in commissions)
+        return total
+
     def get_seller_details(self, obj):
         if obj.seller:
-            return {'first_name': obj.seller.first_name, 'last_name': obj.seller.last_name}
+            return {
+                'first_name': obj.seller.first_name,
+                'last_name': obj.seller.last_name,
+                'display_name': f"{obj.seller.first_name or ''} {obj.seller.last_name or ''}".strip(),
+            }
+        return None
+
+    def get_bank_access_details(self, obj):
+        if obj.bank_access:
+            return {
+                'id': obj.bank_access.id,
+                'username': obj.bank_access.username,
+                'display_name': obj.bank_access.username,
+            }
         return None
 
     def get_company_details(self, obj):

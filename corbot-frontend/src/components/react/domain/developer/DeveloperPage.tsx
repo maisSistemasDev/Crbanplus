@@ -13,6 +13,7 @@ import { QueryProvider } from '../../providers/QueryProvider';
 import { Button } from '../../ui/Button';
 import { Modal } from '../../ui/Modal';
 import { Badge } from '../../ui/Badge';
+import { PageHeader } from '../../ui/PageHeader';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -79,7 +80,7 @@ function CreateKeyModal({ onClose, onCreated }: { onClose: () => void; onCreated
     mutationFn: async () => {
       const body: Record<string, unknown> = { name, scopes: [...selectedScopes] };
       if (expiresAt) body.expires_at = new Date(expiresAt).toISOString();
-      const res = await api.post<CreateAPIKeyResponse>(ENDPOINTS.API_KEYS, body);
+      return api.post<CreateAPIKeyResponse>(ENDPOINTS.API_KEYS, body);
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['api-keys'] });
@@ -366,21 +367,20 @@ export function DeveloperPage() {
   return (
     <div className="max-w-4xl mx-auto space-y-8">
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-[var(--color-text-primary)] flex items-center gap-2">
-            <Key size={26} className="text-[var(--color-primary)]" />
-            Área do Desenvolvedor
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Gerencie as chaves de API para integrar sistemas externos.
-            Cada chave possui escopos que limitam as operações permitidas.
-          </p>
-        </div>
-        <Button icon={<Plus size={16} />} onClick={() => setShowCreate(true)}>
-          Nova Chave
-        </Button>
-      </div>
+      <PageHeader
+        title={
+          <span className="flex items-center gap-2">
+            <Key size={20} className="text-[var(--color-primary)] shrink-0" />
+            Área do desenvolvedor
+          </span>
+        }
+        subtitle="Gerencie as chaves de API para integrar sistemas externos. Cada chave possui escopos que limitam as operações permitidas."
+        actions={
+          <Button size="sm" icon={<Plus size={16} />} onClick={() => setShowCreate(true)}>
+            Nova chave
+          </Button>
+        }
+      />
 
       {/* Info cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

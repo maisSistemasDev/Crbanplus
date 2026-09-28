@@ -1,5 +1,14 @@
 from rest_framework import serializers
-from .models import User, ExtraData, Company, UserPermission, PermissionTemplate
+from .models import (
+    User,
+    ExtraData,
+    Company,
+    UserPermission,
+    PermissionTemplate,
+    PortalUsefulLink,
+    PortalWallMessage,
+    validate_pix_binding,
+)
 import secrets
 import string
 
@@ -8,13 +17,21 @@ class CompanySerializer(serializers.ModelSerializer):
     """
     Serializador para o modelo Company (Corban).
     """
+    inactivated_by_name = serializers.SerializerMethodField()
+
     class Meta:
         model = Company
         fields = ['id', 'name', 'trading_name', 'person_type', 'document', 'logo', 'primary_color', 
                  'secondary_color', 'accent_color', 'settings', 'email', 'phone', 
-                 'website', 'address', 'city', 'state', 'zip_code', 'is_active']
-        read_only_fields = ['id']
-        
+                 'website', 'address', 'city', 'state', 'zip_code', 'is_active',
+                 'inactivated_at', 'inactivation_reason', 'inactivated_by', 'inactivated_by_name']
+        read_only_fields = ['id', 'inactivated_at', 'inactivation_reason', 'inactivated_by']
+
+    def get_inactivated_by_name(self, obj):
+        if obj.inactivated_by:
+            return f'{obj.inactivated_by.first_name} {obj.inactivated_by.last_name}'.strip() or obj.inactivated_by.cpf
+        return None
+
     def form_fields(self, instance=None):
         """
         Retorna informações sobre os campos para construção de formulários no NextJS.
@@ -25,7 +42,8 @@ class CompanySerializer(serializers.ModelSerializer):
             {'name': 'person_type', 'type': 'select', 'label': 'Tipo de Pessoa', 'required': True,
              'options': [{'value': 'PF', 'label': 'Pessoa Física'}, {'value': 'PJ', 'label': 'Pessoa Jurídica'}],
              'default': 'PJ'},
-            {'name': 'document', 'type': 'text', 'label': 'CPF/CNPJ', 'required': True, 'mask': '99.999.999/9999-99'},
+            {'name': 'document', 'type': 'text', 'label': 'CPF/CNPJ', 'required': False, 'mask': '99.999.999/9999-99',
+             'help': 'Opcional. O vínculo do corban (usuário admin) é sempre por CPF; o CNPJ pode ser preenchido depois.'},
             {'name': 'logo', 'type': 'file', 'label': 'Logo', 'required': False, 'accept': 'image/*'},
             {'name': 'primary_color', 'type': 'color', 'label': 'Cor Primária', 'required': False},
             {'name': 'secondary_color', 'type': 'color', 'label': 'Cor Secundária', 'required': False},
@@ -60,19 +78,32 @@ class CompanySerializer(serializers.ModelSerializer):
 class ExtraDataSerializer(serializers.ModelSerializer):
     """
     Serializador para o modelo ExtraData.
+    O campo 'user' é definido automaticamente ao criar via UserSerializer.
     """
     class Meta:
         model = ExtraData
         fields = '__all__'
-        
+        extra_kwargs = {
+            'user': {'required': False, 'read_only': True}
+        }
+
     def form_fields(self):
         """
         Retorna informações sobre os campos para construção de formulários no NextJS.
         """
-        # Como ExtraData pode ter campos dinâmicos, retornamos apenas o campo básico
         return [
-            {'name': 'user', 'type': 'select', 'label': 'Usuário', 'required': True, 'relation': 'User'},
-            {'name': 'data', 'type': 'json', 'label': 'Dados Adicionais', 'required': False}
+            {'name': 'rg', 'type': 'text', 'label': 'RG', 'required': False},
+            {'name': 'birth_date', 'type': 'date', 'label': 'Data de Nascimento', 'required': False},
+            {'name': 'phone', 'type': 'text', 'label': 'Telefone', 'required': False},
+            {'name': 'pix_key', 'type': 'text', 'label': 'Chave PIX', 'required': False},
+            {'name': 'pix_type', 'type': 'select', 'label': 'Tipo de PIX', 'required': False,
+             'options': [
+                 {'value': 'CHAVE_ALEATORIA', 'label': 'Chave Aleatória'},
+                 {'value': 'EMAIL', 'label': 'Email'},
+                 {'value': 'CELULAR', 'label': 'Celular'},
+                 {'value': 'CPF', 'label': 'CPF'},
+                 {'value': 'CNPJ', 'label': 'CNPJ'},
+             ]},
         ]
 
 
@@ -93,8 +124,9 @@ class UserSerializer(serializers.ModelSerializer):
         fields = ['id', 'cpf', 'email', 'first_name', 'last_name', 'role',
                  'leader', 'company', 'company_name', 'is_active', 'extra_data',
                  'is_gerente', 'is_lider', 'is_vendedor', 'is_empresa_admin', 'password',
-                 'certificado', 'matricula']
-        read_only_fields = ['id']
+                 'certificado', 'matricula',
+                 'inactivated_at', 'inactivation_reason', 'inactivated_by']
+        read_only_fields = ['id', 'inactivated_at', 'inactivation_reason', 'inactivated_by']
 
     def get_is_gerente(self, obj):
         return obj.role == User.GERENTE
@@ -113,13 +145,36 @@ class UserSerializer(serializers.ModelSerializer):
             return obj.company.name
         return None
 
+    def validate(self, attrs):
+        extra_data = attrs.get('extra_data')
+        if extra_data:
+            cpf = attrs.get('cpf') or getattr(self.instance, 'cpf', None)
+            if 'company' in attrs:
+                company = attrs.get('company')
+            else:
+                company = getattr(self.instance, 'company', None)
+            cnpj = company.document if company else None
+            error = validate_pix_binding(
+                pix_type=extra_data.get('pix_type'),
+                pix_key=extra_data.get('pix_key'),
+                cpf=cpf,
+                cnpj=cnpj,
+            )
+            if error:
+                raise serializers.ValidationError({'extra_data': {'pix_key': error}})
+        return attrs
+
     def create(self, validated_data):
         password = validated_data.pop('password', None)
+        extra_data = validated_data.pop('extra_data', None)
         user = User(**validated_data)
         if password:
             user.set_password(password)
         user.save()
-        
+
+        if extra_data:
+            ExtraData.objects.create(user=user, **extra_data)
+
         return user
 
     def update(self, instance, validated_data):
@@ -191,8 +246,8 @@ class UserCreateSerializer(UserSerializer):
         Retorna informações sobre os campos para construção de formulários no NextJS.
         """
         fields = super().form_fields(instance=instance)
-        # Adiciona o campo de senha para criação
-        fields.append({'name': 'password', 'type': 'password', 'label': 'Senha', 'required': True})
+        if not any(field.get('name') == 'password' for field in fields):
+            fields.append({'name': 'password', 'type': 'password', 'label': 'Senha', 'required': True})
         return fields
 
 
@@ -274,16 +329,22 @@ class InternalUserSerializer(serializers.ModelSerializer):
     """
     password = serializers.CharField(write_only=True, required=False)
     permissions = UserPermissionSerializer(source='custom_permissions', many=True, read_only=True)
+    permission_ids = serializers.ListField(
+        child=serializers.CharField(),
+        write_only=True,
+        required=False,
+        allow_empty=True,
+    )
     permission_count = serializers.SerializerMethodField()
     
     class Meta:
         model = User
         fields = [
             'id', 'cpf', 'email', 'first_name', 'last_name', 'role',
-            'is_active', 'password', 'permissions', 'permission_count',
-            'certificado', 'matricula', 'created_at', 'updated_at'
+            'is_active', 'password', 'permissions', 'permission_ids', 'permission_count',
+            'certificado', 'matricula', 'date_joined', 'last_login',
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'date_joined', 'last_login']
         extra_kwargs = {
             'cpf': {'required': True},
             'email': {'required': True},
@@ -306,23 +367,25 @@ class InternalUserSerializer(serializers.ModelSerializer):
         return value
     
     def validate_cpf(self, value):
-        """Valida CPF único para usuários internos"""
+        """CPF único entre usuários internos da promotora (admin/colaborador)."""
         import re
         cpf = re.sub(r'\D', '', value)
         if len(cpf) != 11:
             raise serializers.ValidationError('CPF deve ter 11 dígitos.')
-        
-        # Verifica se já existe outro usuário com este CPF
+
+        qs = User.objects.filter(
+            login_document=cpf,
+            role__in=[User.ADMIN, User.COLABORADOR],
+        )
         if self.instance:
-            if User.objects.filter(cpf=cpf).exclude(id=self.instance.id).exists():
-                raise serializers.ValidationError('Já existe um usuário com este CPF.')
-        else:
-            if User.objects.filter(cpf=cpf).exists():
-                raise serializers.ValidationError('Já existe um usuário com este CPF.')
-        
+            qs = qs.exclude(id=self.instance.id)
+        if qs.exists():
+            raise serializers.ValidationError('Já existe um usuário interno com este CPF.')
+
         return cpf
     
     def create(self, validated_data):
+        permission_ids = validated_data.pop('permission_ids', None)
         password = validated_data.pop('password', None)
         # Usuários internos não têm company vinculada
         validated_data['company'] = None
@@ -336,19 +399,78 @@ class InternalUserSerializer(serializers.ModelSerializer):
             user.set_password(temp_password)
         
         user.save()
+        self._save_permissions(user, permission_ids)
         return user
     
     def update(self, instance, validated_data):
+        permission_ids = validated_data.pop('permission_ids', None)
         password = validated_data.pop('password', None)
-        
+        validated_data.pop('company', None)
+
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
-        
+
+        instance.company = None
+        instance.leader = None
+
         if password:
             instance.set_password(password)
-        
+
         instance.save()
+        self._save_permissions(instance, permission_ids)
         return instance
+
+    def _save_permissions(self, user: User, permission_ids: list | None):
+        """Atualiza permissões granulares quando o usuário é colaborador."""
+        if permission_ids is None:
+            return
+
+        # Apenas colaboradores usam permissões granulares
+        if user.role != User.COLABORADOR:
+            user.custom_permissions.all().delete()
+            return
+
+        available = self._available_permissions_dict()
+        user.custom_permissions.all().delete()
+        for codename in permission_ids:
+            perm = available.get(codename)
+            if not perm:
+                continue
+            UserPermission.objects.create(
+                user=user,
+                codename=perm['codename'],
+                name=perm['name'],
+                category=perm['category'],
+                description=perm.get('description', ''),
+            )
+
+    def _available_permissions_dict(self):
+        """Retorna dicionário com as permissões disponíveis."""
+        permissions = [
+            {'codename': 'view_corbans', 'name': 'Visualizar Corbans', 'category': UserPermission.CATEGORY_CORBANS},
+            {'codename': 'create_corbans', 'name': 'Criar Corbans', 'category': UserPermission.CATEGORY_CORBANS},
+            {'codename': 'edit_corbans', 'name': 'Editar Corbans', 'category': UserPermission.CATEGORY_CORBANS},
+            {'codename': 'delete_corbans', 'name': 'Deletar Corbans', 'category': UserPermission.CATEGORY_CORBANS},
+            {'codename': 'view_users', 'name': 'Visualizar Usuários', 'category': UserPermission.CATEGORY_USERS},
+            {'codename': 'create_users', 'name': 'Criar Usuários', 'category': UserPermission.CATEGORY_USERS},
+            {'codename': 'edit_users', 'name': 'Editar Usuários', 'category': UserPermission.CATEGORY_USERS},
+            {'codename': 'delete_users', 'name': 'Deletar Usuários', 'category': UserPermission.CATEGORY_USERS},
+            {'codename': 'view_proposals', 'name': 'Visualizar Propostas', 'category': UserPermission.CATEGORY_PROPOSALS},
+            {'codename': 'create_proposals', 'name': 'Criar Propostas', 'category': UserPermission.CATEGORY_PROPOSALS},
+            {'codename': 'edit_proposals', 'name': 'Editar Propostas', 'category': UserPermission.CATEGORY_PROPOSALS},
+            {'codename': 'delete_proposals', 'name': 'Deletar Propostas', 'category': UserPermission.CATEGORY_PROPOSALS},
+            {'codename': 'approve_proposals', 'name': 'Aprovar Propostas', 'category': UserPermission.CATEGORY_PROPOSALS},
+            {'codename': 'view_payments', 'name': 'Visualizar Pagamentos', 'category': UserPermission.CATEGORY_PAYMENTS},
+            {'codename': 'create_payments', 'name': 'Criar Pagamentos', 'category': UserPermission.CATEGORY_PAYMENTS},
+            {'codename': 'edit_payments', 'name': 'Editar Pagamentos', 'category': UserPermission.CATEGORY_PAYMENTS},
+            {'codename': 'approve_payments', 'name': 'Aprovar Pagamentos', 'category': UserPermission.CATEGORY_PAYMENTS},
+            {'codename': 'view_reports', 'name': 'Visualizar Relatórios', 'category': UserPermission.CATEGORY_REPORTS},
+            {'codename': 'export_reports', 'name': 'Exportar Relatórios', 'category': UserPermission.CATEGORY_REPORTS},
+            {'codename': 'view_settings', 'name': 'Visualizar Configurações', 'category': UserPermission.CATEGORY_SETTINGS},
+            {'codename': 'edit_settings', 'name': 'Editar Configurações', 'category': UserPermission.CATEGORY_SETTINGS},
+            {'codename': 'manage_commercial_teams', 'name': 'Gerenciar Equipes Comerciais', 'category': UserPermission.CATEGORY_COMMERCIAL},
+        ]
+        return {perm['codename']: perm for perm in permissions}
     
     def form_fields(self, instance=None):
         """
@@ -359,10 +481,10 @@ class InternalUserSerializer(serializers.ModelSerializer):
             {'name': 'email', 'type': 'email', 'label': 'Email', 'required': True},
             {'name': 'first_name', 'type': 'text', 'label': 'Nome', 'required': True},
             {'name': 'last_name', 'type': 'text', 'label': 'Sobrenome', 'required': True},
-            {'name': 'role', 'type': 'select', 'label': 'Tipo de Usuário', 'required': True,
+            {'name': 'role', 'type': 'select', 'label': 'Papel na promotora', 'required': True,
              'options': [
-                 {'value': User.ADMIN, 'label': 'Administrador'},
-                 {'value': User.COLABORADOR, 'label': 'Colaborador'}
+                 {'value': User.ADMIN, 'label': 'Administrador da promotora'},
+                 {'value': User.COLABORADOR, 'label': 'Colaborador da promotora'}
              ]},
             {'name': 'password', 'type': 'password', 'label': 'Senha', 'required': not instance},
             {'name': 'certificado', 'type': 'text', 'label': 'Certificado', 'required': False},
@@ -414,4 +536,64 @@ class CollaboratorPermissionsSerializer(serializers.Serializer):
             )
         
         return user
+
+
+class PortalUsefulLinkSerializer(serializers.ModelSerializer):
+    """Serializer de links úteis para o portal dos corbans."""
+
+    created_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PortalUsefulLink
+        fields = [
+            'id',
+            'title',
+            'url',
+            'is_active',
+            'display_order',
+            'created_by',
+            'created_by_name',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['id', 'created_by', 'created_by_name', 'created_at', 'updated_at']
+
+    def get_created_by_name(self, obj):
+        if not obj.created_by:
+            return None
+        return f'{obj.created_by.first_name} {obj.created_by.last_name}'.strip() or obj.created_by.cpf
+
+
+class PortalWallMessageSerializer(serializers.ModelSerializer):
+    """Serializer de mensagens do mural para o portal dos corbans."""
+
+    company_name = serializers.SerializerMethodField()
+    created_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PortalWallMessage
+        fields = [
+            'id',
+            'title',
+            'message',
+            'company',
+            'company_name',
+            'starts_at',
+            'ends_at',
+            'is_active',
+            'display_order',
+            'created_by',
+            'created_by_name',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['id', 'company_name', 'created_by', 'created_by_name', 'created_at', 'updated_at']
+
+    def get_company_name(self, obj):
+        return obj.company.name if obj.company else 'Todos os corbans'
+
+    def get_created_by_name(self, obj):
+        if not obj.created_by:
+            return None
+        return f'{obj.created_by.first_name} {obj.created_by.last_name}'.strip() or obj.created_by.cpf
 

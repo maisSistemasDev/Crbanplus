@@ -1,0 +1,12 @@
+---
+import AuthLayout from '../../../layouts/AuthLayout.astro';
+import { GroupRegistrationPage } from '../../../components/react/domain/registration/GroupRegistrationPage';
+
+const { token } = Astro.params;
+if (!token) {
+  return Astro.redirect('/login');
+}
+---
+<AuthLayout title="Cadastro de vendedor">
+  <GroupRegistrationPage client:only="react" token={token} />
+</AuthLayout>

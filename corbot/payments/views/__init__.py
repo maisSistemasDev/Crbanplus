@@ -17,10 +17,13 @@ from .comission import (
     CommissionDetailView,
     GenerateComissionsView,
     CommissionMirrorView,
+    CommissionConsolidatedView,
+    CommissionDebitDetailView,
     CommissionBalanceView,
 )
 
 from .payment import PaymentView, WithdrawView
+from .debit import UserDebitListCreateView, UserDebitDetailView
 from .corbanpay_withdraw import CorbanPayWithdrawView
 
 from .form_fields import (
@@ -35,8 +38,10 @@ __all__ = [
     'CommissionGroupByUserManageView',
     'CommissionGroupMaxRatesView', 'CommissionGroupByCompanyMaxRatesView',
     'PaymentView', 'WithdrawView', 'CorbanPayWithdrawView',
+    'UserDebitListCreateView', 'UserDebitDetailView',
     'CommissionListCreateView', 'CommissionDetailView', 'GenerateComissionsView',
-    'CommissionMirrorView', 'CommissionBalanceView',
+    'CommissionMirrorView', 'CommissionConsolidatedView', 'CommissionDebitDetailView',
+    'CommissionBalanceView',
     'CommissionGroupFormFieldsView', 'CommissionGroupByCompanyFormFieldsView',
     'PaymentFormFieldsView',
 ]

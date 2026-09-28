@@ -3,7 +3,7 @@ from bank_access.models import BankAccess
 from django.db.models import Q
 from typing import Callable
 import hashlib
-from .utils import extract_emails, convert_value
+from .utils import extract_emails, convert_value, parse_brazilian_date
 from datetime import datetime
 import pandas as pd
 
@@ -16,6 +16,14 @@ class LayoutValidation:
         self.Table = Table
         self.BankAccess = BankAccess
         self.StatusPayment = StatusPayment
+        self._matcher = None
+
+    def _get_matcher(self):
+        if self._matcher is None:
+            from .preview_matcher import BatchPreviewMatcher
+            bank = getattr(self.proposal, 'bank', None) or self.layout.bank
+            self._matcher = BatchPreviewMatcher(bank)
+        return self._matcher
     def _ensure_valid_date(self, date_value, field_name="data"):
         """
         Garante que um valor de data seja convertido para um objeto date Python válido
@@ -23,61 +31,83 @@ class LayoutValidation:
         """
         if date_value is None:
             return None
-            
+
         try:
-            if isinstance(date_value, pd.Timestamp):
-                return date_value.to_pydatetime().date()
-            elif isinstance(date_value, datetime):
-                return date_value.date()
-            elif isinstance(date_value, str):
-                # Tentar diferentes formatos de string
-                try:
-                    return datetime.strptime(date_value, '%Y-%m-%d').date()
-                except ValueError:
-                    try:
-                        return pd.to_datetime(date_value).date()
-                    except Exception:
-                        raise Exception(f'Formato de data inválido para {field_name}: {date_value}')
-            else:
-                # Se já for um objeto date válido, retorna como está
-                return date_value
+            parsed = parse_brazilian_date(date_value)
+            if parsed is None:
+                raise Exception(f'Formato de data inválido para {field_name}: {date_value}')
+            return parsed
         except Exception as e:
             raise Exception(f'Erro ao processar {field_name}: {e}')
+
+    def _get_field_value(self, proposal_data: dict, field: LayoutField):
+        """Busca valor pelo header_name/nome do campo (CSV/ETL), com fallback posicional legado."""
+        if not field:
+            return None
+
+        if isinstance(proposal_data, dict):
+            for key in (field.header_name, field.name):
+                if key and key in proposal_data:
+                    return proposal_data[key]
+
+            # Fallback legado: dict com valores na ordem das colunas do arquivo
+            values = list(proposal_data.values())
+            if field.index < len(values):
+                return values[field.index]
+
+        if isinstance(proposal_data, (list, tuple)) and field.index < len(proposal_data):
+            return proposal_data[field.index]
+
+        return None
+
+    def _require_field_value(self, proposal_data: dict, field: LayoutField, field_name: str):
+        value = self._get_field_value(proposal_data, field)
+        if value is None:
+            raise Exception(
+                f'Campo obrigatório "{field_name}" ausente no arquivo '
+                f'(header esperado: "{field.header_name}")'
+            )
+        if isinstance(value, str) and value.strip().lower() in ('', 'nan', 'none'):
+            raise Exception(
+                f'Campo obrigatório "{field_name}" vazio '
+                f'(header: "{field.header_name}")'
+            )
+        if pd.isna(value):
+            raise Exception(
+                f'Campo obrigatório "{field_name}" inválido '
+                f'(header: "{field.header_name}")'
+            )
+        return value
         
     def construct_proposal(self, proposal_data:dict):
         try:
             self.proposal.original_data = proposal_data
-            values = list(proposal_data.values())
             
-            # Verificação de segurança para campos obrigatórios
-            required_fields = ['disbursement_date', 'amount', 'client_document', 'contract_number', 'client_name', 'agreement', 'table', 'seller']
+            required_fields = ['disbursement_date', 'amount', 'client_document', 'contract_number', 'client_name', 'agreement', 'table']
             
             for field_name in required_fields:
                 field_mapping = self.layout.map_fields.filter(name=field_name).first()
                 if not field_mapping:
                     raise Exception(f'Campo obrigatório "{field_name}" não encontrado no mapeamento do layout')
-                
-                if field_mapping.index >= len(values):
-                    raise Exception(f'Índice do campo "{field_name}" ({field_mapping.index}) excede o número de valores disponíveis ({len(values)})')
+                self._require_field_value(proposal_data, field_mapping, field_name)
             
-            # Conversão dos campos com verificação de tipos
             disbursement_field = self.layout.map_fields.filter(name='disbursement_date').first()
-            disbursement_value = values[disbursement_field.index]
+            disbursement_value = self._get_field_value(proposal_data, disbursement_field)
             self.proposal.disbursement_date = convert_value(disbursement_value, 'date')
             amount_field = self.layout.map_fields.filter(name='amount').first()
-            amount_value = values[amount_field.index]
+            amount_value = self._get_field_value(proposal_data, amount_field)
             self.proposal.amount = convert_value(amount_value, amount_field.data_type)
             
             client_doc_field = self.layout.map_fields.filter(name='client_document').first()
-            client_doc_value = values[client_doc_field.index]
+            client_doc_value = self._get_field_value(proposal_data, client_doc_field)
             self.proposal.client_document = convert_value(client_doc_value, client_doc_field.data_type)
             
             contract_field = self.layout.map_fields.filter(name='contract_number').first()
-            contract_value = values[contract_field.index]
+            contract_value = self._get_field_value(proposal_data, contract_field)
             self.proposal.contract_number = convert_value(contract_value, contract_field.data_type)
             
             client_name_field = self.layout.map_fields.filter(name='client_name').first()
-            client_name_value = values[client_name_field.index]
+            client_name_value = self._get_field_value(proposal_data, client_name_field)
             self.proposal.client_name = convert_value(client_name_value, client_name_field.data_type)
 
             # Validar que o layout tem um banco associado e atribuir ANTES de usar
@@ -87,22 +117,58 @@ class LayoutValidation:
 
             # Agora posso obter o status (que precisa do banco)
             status_field = self.layout.map_fields.filter(name='status').first()
-            status_value = values[status_field.index]
+            status_value = self._get_field_value(proposal_data, status_field)
             self.proposal.status = self.get_status(status_value)
             
             agreement_field = self.layout.map_fields.filter(name='agreement').first()
-            agreement_value = values[agreement_field.index]
+            agreement_value = self._get_field_value(proposal_data, agreement_field)
             self.proposal.agreement = self.get_agreement(agreement_value)
             
             table_field = self.layout.map_fields.filter(name='table').first()
-            table_value = values[table_field.index]
+            table_value = self._get_field_value(proposal_data, table_field)
             self.proposal.table = self.get_table(self.proposal.amount, table_value)
             
-            seller_field = self.layout.map_fields.filter(name='seller').first()
-            seller_value = values[seller_field.index]
-            self.proposal.seller = self.get_user(seller_value)
-            
-            self.proposal.company = self.proposal.seller.company
+            # Resolução de digitador / acesso bancário
+            digitador_field = self.layout.map_fields.filter(name='digitador').first()
+            digitador_value = self._get_field_value(proposal_data, digitador_field)
+            bank_access_field = self.layout.map_fields.filter(name='bank_access').first()
+            bank_access_value = self._get_field_value(proposal_data, bank_access_field)
+
+            # Pelo menos um dos dois campos deve estar mapeado
+            if not digitador_field and not bank_access_field:
+                raise Exception(
+                    'Layout deve possuir pelo menos um dos campos mapeados: "Digitador" ou "Acessos".'
+                )
+
+            # Se o campo não estiver mapeado, seu valor pode ser None
+            if digitador_field:
+                self.proposal.digitador = convert_value(digitador_value, digitador_field.data_type) if digitador_value is not None else None
+            if bank_access_field and bank_access_value is not None:
+                bank = self.proposal.bank or self.layout.bank
+                from bank_access.services import resolve_bank_access
+                bank_access = resolve_bank_access(bank, bank_access_value)
+                if not bank_access:
+                    raise Exception(
+                        f'❌ Acesso bancário não mapeado: "{bank_access_value}" - '
+                        f'Cadastre o acesso ou mapeie na resolução de valores'
+                    )
+                self.proposal.bank_access = bank_access
+                # Se houver usuário vinculado ao acesso, preenche o vendedor
+                if bank_access.user:
+                    self.proposal.seller = bank_access.user
+                    self.proposal.company = bank_access.user.company
+                else:
+                    # Quando só existe acesso sem usuário, exige o nome do digitador
+                    if not self.proposal.digitador:
+                        raise Exception(
+                            f'❌ Acesso bancário "{bank_access_value}" não possui usuário vinculado. '
+                            f'Mapeie também o campo "Digitador" para prosseguir.'
+                        )
+
+            # Fallback de empresa quando não resolvemos via acesso bancário
+            if not self.proposal.company and self.proposal.seller:
+                self.proposal.company = self.proposal.seller.company
+
             self.proposal.status = 'pending'
             self.proposal.uploaded_at = datetime.now()
             
@@ -112,66 +178,30 @@ class LayoutValidation:
         
     def get_table(self, amount:float, name_in_bank:str):
         try:
-            # 1. Buscar tabela pelo nome exato
-            tables = Table.objects.filter(name_in_bank=name_in_bank)
-
-            # 2. Se não existir, buscar em todas e procurar nos aliases em Python
-            if not tables.exists():
-                all_tables = Table.objects.all()
-                matched_tables = []
-                name_lower = name_in_bank.lower().strip()
-                for table in all_tables:
-                    if isinstance(table.alias, list):
-                        for alias in table.alias:
-                            if name_lower == str(alias).lower().strip():
-                                matched_tables.append(table)
-                                break
-                tables = matched_tables
+            tables = self._get_matcher().match_tables(name_in_bank)
 
             if not tables:
-                raise Exception(f'Tabela não encontrada: {name_in_bank}')
+                bank_name = getattr(getattr(self.layout, 'bank', None), 'name', None) or 'este banco'
+                raise Exception(
+                    f'Tabela não encontrada: {name_in_bank} '
+                    f'(não há tabela cadastrada/vinculada com esse nome em {bank_name})'
+                )
 
-            # 3. Filtrar tabelas válidas pelo valor — verifica faixas (CommissionRange)
-            #    e faz fallback para campos legados se não houver faixas.
-            from decimal import Decimal
-            amount_decimal = Decimal(str(amount))
-
-            def _table_covers_amount(table):
-                # Ignora faixas com min=0 e max=0 (placeholders sem valor definido)
-                ranges = list(table.commission_ranges.exclude(
-                    min_value=0, max_value=0
-                ).order_by('min_value'))
-                if ranges:
-                    return any(cr.min_value <= amount_decimal <= cr.max_value for cr in ranges)
-                # fallback legado
-                if table.min_value is None and table.max_value is None:
-                    return True
-                min_v = table.min_value or Decimal('0')
-                max_v = table.max_value or Decimal('0')
-                return (min_v <= amount_decimal <= max_v) or (max_v == 0 and min_v == 0)
-
-            valid_tables = [t for t in tables if _table_covers_amount(t)]
+            valid_tables = [t for t in tables if t.covers_amount(amount)]
 
             if not valid_tables:
                 raise Exception(f'Nenhuma tabela válida encontrada para o valor {amount}: {name_in_bank}')
 
-            # 4. Aplicar lógica de vigência
-            # Filtrar apenas tabelas ativas e com vigência <= data de desembolso
-            active_tables = [t for t in valid_tables if t.is_active and t.vigency_date <= self.proposal.disbursement_date]
-
-            if not active_tables:
-                active_tables = valid_tables
-
-            # Encontrar a tabela com maior vigência
-            max_vigency_date = max(t.vigency_date for t in active_tables)
-            max_vigency_tables = [t for t in active_tables if t.vigency_date == max_vigency_date]
-
-            # Se há apenas uma tabela com a maior vigência, retorna ela
-            if len(max_vigency_tables) == 1:
-                return max_vigency_tables[0]
-
-            # Se há múltiplas tabelas com a mesma vigência máxima, retorna a primeira
-            return max_vigency_tables[0]
+            # Vigência = data de INÍCIO (a tabela vale a partir desta data).
+            # Escolhe a mais recente que já começou na data de desembolso.
+            disbursement = self.proposal.disbursement_date
+            started = [
+                t for t in valid_tables
+                if t.is_active and t.vigency_date and disbursement and t.vigency_date <= disbursement
+            ]
+            pool = started or valid_tables
+            max_vigency_date = max(t.vigency_date for t in pool)
+            return next(t for t in pool if t.vigency_date == max_vigency_date)
 
         except Exception as e:
             raise Exception(f'Erro ao buscar tabela: {e}')
@@ -197,38 +227,23 @@ class LayoutValidation:
         raise Exception(f'❌ Convênio não encontrado: "{name}"')
         
     def get_user(self, login):
+        """Mantido para compatibilidade; prefira resolve_bank_access com banco."""
         if not login or login == 'nan':
-            raise Exception(f'❌ Vendedor não mapeado: "{login}" - Realize o mapeamento na resolução de valores')
+            raise Exception(
+                f'❌ Vendedor não mapeado: "{login}" - '
+                f'Realize o mapeamento na resolução de valores'
+            )
 
-        value = str(login).strip()
-        emails = extract_emails(value)
-        value = emails[0].lower() if len(emails) > 0 else value.lower()
+        bank = getattr(self.proposal, 'bank', None) or self.layout.bank
+        from bank_access.services import resolve_bank_access
+        access = resolve_bank_access(bank, login)
+        if access and access.user:
+            return access.user
 
-        # Buscar por username exato
-        bank_access = BankAccess.objects.filter(username=value).first()
-        if bank_access:
-            return bank_access.user
-
-        # Buscar por username contendo o email
-        bank_access = BankAccess.objects.filter(username__icontains=value).first()
-        if bank_access:
-            return bank_access.user
-
-        # Buscar em aliases (em Python, compatível com SQLite)
-        # Compara tanto o alias completo quanto o email extraído do alias
-        all_accesses = BankAccess.objects.all()
-        for access in all_accesses:
-            if isinstance(access.alias, list):
-                for alias in access.alias:
-                    alias_str = str(alias).lower().strip()
-                    if value == alias_str:
-                        return access.user
-                    # Extrai email do alias (ex: "email@dom.com (Nome)") e compara
-                    alias_emails = extract_emails(alias_str)
-                    if alias_emails and value == alias_emails[0].lower():
-                        return access.user
-
-        raise Exception(f'❌ Vendedor não mapeado: "{login}" - Realize o mapeamento na resolução de valores')
+        raise Exception(
+            f'❌ Vendedor não mapeado: "{login}" - '
+            f'Realize o mapeamento na resolução de valores'
+        )
 
     def get_status(self, name):
         if not self.proposal.bank:
@@ -256,7 +271,7 @@ class ProposalValidation:
             try:
                 func()
             except Exception as e:
-                self.last_error = e
+                self.last_error = str(e)
                 return False
         return True
         

@@ -25,12 +25,16 @@ export function HeaderContent() {
   }, [user]);
 
   return (
-    <header className="h-14 bg-white border-b border-[var(--color-header-border)] flex items-center justify-between px-4 shrink-0">
+    <header
+      className="bg-white border-b border-[var(--color-header-border)] flex items-center justify-between px-3 shrink-0"
+      style={{ height: 'var(--header-height)' }}
+    >
       <div className="flex items-center gap-3">
         <button
           onClick={toggleSidebar}
-          className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-500"
+          className="hidden md:flex p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-500"
           title={collapsed ? 'Expandir menu' : 'Recolher menu'}
+          aria-label={collapsed ? 'Expandir menu' : 'Recolher menu'}
         >
           {collapsed ? <Menu size={20} /> : <PanelLeftClose size={20} />}
         </button>

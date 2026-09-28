@@ -1,8 +1,3 @@
 ---
-import DashboardLayout from '@/layouts/DashboardLayout.astro';
-import InternalUserList from '@/components/react/domain/internal-users/InternalUserList';
+return Astro.redirect('/colaboradores');
 ---
-
-<DashboardLayout title="Usuários Internos - CorbanPlus">
-  <InternalUserList client:load />
-</DashboardLayout>

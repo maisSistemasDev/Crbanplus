@@ -95,14 +95,15 @@ class FileProcessingMixin:
 
     def read_excel_file(self, file, sheet_name=0):
         try:
-            df = pd.read_excel(file, sheet_name=sheet_name)
+            # dtype=str preserva zeros à esquerda em CPF/CNPJ/telefone.
+            df = pd.read_excel(file, sheet_name=sheet_name, dtype=str)
             return df.to_dict(orient='records')
         except Exception as e:
             raise ValueError(f"Erro ao processar arquivo Excel: {str(e)}")
 
     def read_csv_file(self, file, delimiter=',', encoding='utf-8'):
         try:
-            df = pd.read_csv(file, delimiter=delimiter, encoding=encoding)
+            df = pd.read_csv(file, delimiter=delimiter, encoding=encoding, dtype=str)
             return df.to_dict(orient='records')
         except Exception as e:
             raise ValueError(f"Erro ao processar arquivo CSV: {str(e)}")

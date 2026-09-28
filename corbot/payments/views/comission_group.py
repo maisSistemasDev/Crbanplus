@@ -5,6 +5,8 @@ from decimal import Decimal
 from rest_framework.response import Response
 from rest_framework import status, permissions
 from django.shortcuts import get_object_or_404
+from django.db import transaction
+from django.db.models import Q
 from django.utils.timezone import now
 from django.http import HttpResponse
 import csv
@@ -22,37 +24,27 @@ from bank.models import Bank, Table, normalize_name
 logger = logging.getLogger(__name__)
 
 
-def validate_company_rules(rules_data, company):
+def validate_company_rules(rules_data, company=None):
     """
-    Valida que as taxas de CommissionRulesByUser de um CommissionGroup (empresa)
-    não excedem as taxas definidas no CommissionGroupByCompany da promotora.
+    Valida taxas de CommissionRulesByUser de um CommissionGroup (Corban).
+
+    O valor definido nas regras do próprio grupo é o que vale para distribuição.
+    O único teto externo é a taxa base da Table (banco) — não há mais camada
+    separada de "Limites" (CommissionGroupByCompany).
     """
+    _ = company
     errors = []
-    company_group = CommissionGroupByCompany.objects.filter(
-        companies=company, is_active=True
-    ).first()
-
-    if not company_group:
-        return errors
-
-    max_rates = {}
-    for rule in company_group.comission_rules.all():
-        key = (str(rule.bank_id), str(rule.table_id))
-        max_rates[key] = rule.commission_rate
-
     for rule_data in rules_data:
-        bank_id = str(rule_data.get('bank', ''))
-        table_id = str(rule_data.get('table', ''))
+        table_id = rule_data.get('table')
         leader_rate = Decimal(str(rule_data.get('leader_commission_rate', 0)))
         seller_rate = Decimal(str(rule_data.get('seller_commission_rate', 0)))
         total = leader_rate + seller_rate
-        key = (bank_id, table_id)
 
-        if key in max_rates and total > max_rates[key]:
-            table = Table.objects.filter(id=table_id).first()
-            table_name = table.name_in_bank if table else table_id
+        table = Table.objects.filter(id=table_id).first()
+        if table and table.commission_rate is not None and total > table.commission_rate:
             errors.append(
-                f"Tabela '{table_name}': soma das taxas ({total}%) excede o limite da promotora ({max_rates[key]}%)"
+                f"Tabela '{table.name_in_bank}': soma das taxas ({total}%) "
+                f"excede a taxa base da tabela ({table.commission_rate}%)"
             )
 
     return errors
@@ -62,10 +54,22 @@ def validate_promotora_rules(rules_data):
     """
     Valida que as taxas de CommissionRules (promotora) não excedem
     a commission_rate da Table original.
+
+    Regras com valor fixo não são comparadas à taxa base da tabela,
+    pois o valor fixo substitui o cálculo percentual.
     """
     errors = []
     for rule_data in rules_data:
         table_id = rule_data.get('table')
+        fixed_value = rule_data.get('fixed_value')
+
+        # Valor fixo preenchido substitui a taxa percentual; não valida contra tabela.
+        if fixed_value is not None and fixed_value != '':
+            fixed = Decimal(str(fixed_value))
+            if fixed < 0:
+                errors.append("Valor fixo de comissão não pode ser negativo.")
+            continue
+
         rate = Decimal(str(rule_data.get('commission_rate', 0)))
 
         table = Table.objects.filter(id=table_id).first()
@@ -96,26 +100,38 @@ class CommissionGroupListCreateView(BaseApiView):
         user = request.user
 
         if user.role == User.ADMIN:
-            groups = CommissionGroup.objects.all()
+            groups = CommissionGroup.objects.select_related('company').all()
         elif user.role == User.GERENTE:
-            from django.db.models import Q
-            groups = CommissionGroup.objects.filter(
-                Q(company=user.company, by_leader=False) | Q(company__isnull=True)
+            groups = CommissionGroup.objects.select_related('company').filter(
+                Q(company=user.company, by_leader=False, created_by=user)
+                | Q(company__isnull=True, created_by=user)
             )
         elif user.role == User.EMPRESA_ADMIN:
             # Corban vê apenas grupos da sua própria empresa (criados por ele ou pelo gerente)
             # Grupos da promotora (company=None) não são exibidos, mesmo que o corban seja membro
-            groups = CommissionGroup.objects.filter(company=user.company)
+            groups = CommissionGroup.objects.select_related('company').filter(company=user.company)
         elif user.role == User.LIDER:
-            groups = CommissionGroup.objects.filter(company=user.company, by_leader=True, leader=user)
+            groups = CommissionGroup.objects.select_related('company').filter(
+                company=user.company, by_leader=True, leader=user, created_by=user,
+            )
         else:
             # Vendedor: only groups they belong to
-            groups = CommissionGroup.objects.filter(sellers=user)
+            groups = CommissionGroup.objects.select_related('company').filter(sellers=user)
+
+        scope = request.GET.get('scope', '').strip().lower()
+        if scope == 'promotora':
+            groups = groups.filter(company__isnull=True)
+        elif scope in ('corban', 'company', 'by-company'):
+            groups = groups.filter(company__isnull=False)
 
         # Filtrar por status ativo se solicitado
         if request.GET.get('active') == 'true':
             groups = groups.filter(is_active=True)
-        
+
+        search = request.GET.get('search', '').strip()
+        if search:
+            groups = groups.filter(name__icontains=search)
+
         serializer = CommissionGroupSerializer(groups, many=True)
         
         # Registra a ação usando o método da classe base
@@ -177,7 +193,7 @@ class CommissionGroupListCreateView(BaseApiView):
         serializer = CommissionGroupSerializer(data=request.data)
         
         if serializer.is_valid():
-            commission_group = serializer.save()
+            commission_group = serializer.save(created_by=request.user)
             rules = []
             if rules_data:
                 for rule in rules_data:
@@ -226,6 +242,16 @@ class CommissionGroupDetailView(BaseApiView):
         # Corban (empresa_admin) só acessa grupos da sua própria empresa
         if user.role == User.EMPRESA_ADMIN:
             if commission_group.company is None or commission_group.company != user.company:
+                self.permission_denied(self.request)
+            return commission_group
+        if user.role == User.GERENTE:
+            if commission_group.created_by_id != user.id:
+                self.permission_denied(self.request)
+            return commission_group
+        if user.role == User.LIDER:
+            if commission_group.created_by_id != user.id:
+                self.permission_denied(self.request)
+            if commission_group.leader_id != user.id:
                 self.permission_denied(self.request)
             return commission_group
         # Grupos da promotora (sem empresa vinculada): acessíveis a gerentes e líderes
@@ -564,42 +590,137 @@ class CommissionGroupByUserManageView(BaseApiView):
         permission_classes = [IsAdminOrGerenteOrLider]
         return [permission() for permission in permission_classes]
 
+    @transaction.atomic
     def put(self, request, pk, format=None):
         """
-        Adiciona regras de comissionamento por usuário a um grupo de comissionamento por empresa.
+        Atualiza vendedores e líderes do grupo em lote (M2M set, sem N adds).
         """
-        users = request.data.get('user_ids')
+        raw_ids = request.data.get('user_ids')
+        if raw_ids is None:
+            return Response(
+                {"error": "user_ids é obrigatório"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            user_ids = [int(uid) for uid in raw_ids]
+        except (TypeError, ValueError):
+            return Response(
+                {"error": "user_ids inválido"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         commission_group = get_object_or_404(self.model, id=pk)
-        users = User.objects.filter(id__in=users)
-        commission_group.sellers.clear()
-        commission_group.leaders.clear()
-        for user in users:
-            if request.user.role in [User.ADMIN, User.EMPRESA_ADMIN, User.GERENTE]:
+        requester = request.user
+
+        if requester.role in (User.GERENTE, User.LIDER) and commission_group.created_by_id != requester.id:
+            return Response(
+                {"detail": "Você só pode editar membros de equipes criadas por você."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if not user_ids:
+            commission_group.sellers.clear()
+            commission_group.leaders.clear()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+        users = list(
+            User.objects.filter(id__in=user_ids).only(
+                'id', 'role', 'leader_id', 'company_id',
+            )
+        )
+        users_by_id = {u.id: u for u in users}
+        ordered_users = [users_by_id[i] for i in user_ids if i in users_by_id]
+        selected_id_set = set(user_ids)
+
+        # Grupo vinculado a um Corban: só usuários da hierarquia daquele Corban.
+        if commission_group.company_id:
+            allowed_roles = {
+                User.VENDEDOR,
+                User.LIDER,
+                User.GERENTE,
+                User.EMPRESA_ADMIN,
+            }
+            invalid = [
+                u for u in ordered_users
+                if u.company_id != commission_group.company_id or u.role not in allowed_roles
+            ]
+            if invalid:
+                return Response(
+                    {
+                        "error": (
+                            "Grupos por Corban só aceitam usuários da hierarquia "
+                            "do Corban vinculado (empresa_admin, gerente, líder ou vendedor)."
+                        ),
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if commission_group.by_leader and commission_group.leader_id:
+                for user in ordered_users:
+                    if user.id == commission_group.leader_id:
+                        continue
+                    if user.role != User.VENDEDOR or user.leader_id != commission_group.leader_id:
+                        return Response(
+                            {
+                                "error": (
+                                    "Neste grupo por líder, só o próprio líder e "
+                                    "seus vendedores podem ser incluídos."
+                                ),
+                            },
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+
+        seller_ids: list[int] = []
+        leader_ids: list[int] = []
+
+        if requester.role in (User.ADMIN, User.EMPRESA_ADMIN, User.GERENTE):
+            for user in ordered_users:
                 if user.role == User.VENDEDOR:
-                    commission_group.sellers.add(user)
-                #Adiciona o lider e os vendedores associados a ele
+                    seller_ids.append(user.id)
                 elif user.role == User.LIDER:
-                    commission_group.leaders.add(user)
-                    sellers = User.objects.filter(leader=user).exclude(id__in=[u.id for u in users])
-                    if sellers.count() > 0:
-                        commission_group.sellers.set(sellers)
-                # Empresa admin (corban) é adicionado como seller em grupos da promotora
-                elif user.role == User.EMPRESA_ADMIN:
-                    commission_group.sellers.add(user)
-            elif request.user.role == User.LIDER:
-                if user.role == User.VENDEDOR:
-                    commission_group.sellers.add(user)
-                    #Remove o vendedor de seus grupos anteriores
-                    old_groups = CommissionGroup.objects.filter(sellers=user).exclude(id=pk)
-                    for old_group in old_groups:
-                        old_group.sellers.remove(user)
-                        old_group.save()
-                else:
+                    leader_ids.append(user.id)
+                elif user.role in (User.EMPRESA_ADMIN, User.GERENTE):
+                    # Em grupo por Corban, admin/gerente da empresa podem entrar
+                    # como membros operacionais. Em grupo da promotora, empresa_admin
+                    # representa o vínculo do Corban.
+                    seller_ids.append(user.id)
+
+            if leader_ids:
+                team_qs = User.objects.filter(
+                    leader_id__in=leader_ids,
+                    role=User.VENDEDOR,
+                ).exclude(id__in=selected_id_set)
+                if commission_group.company_id:
+                    team_qs = team_qs.filter(company_id=commission_group.company_id)
+                seller_ids.extend(team_qs.values_list('id', flat=True))
+
+        elif requester.role == User.LIDER:
+            for user in ordered_users:
+                if user.role != User.VENDEDOR:
                     return Response(
-                        {"error": "Usuário não tem permissão para adicionar líderes a um grupo de comissionamento"},
-                        status=status.HTTP_403_FORBIDDEN
+                        {
+                            "error": "Usuário não tem permissão para adicionar líderes a um grupo de comissionamento",
+                        },
+                        status=status.HTTP_403_FORBIDDEN,
                     )
-        commission_group.save()
+                seller_ids.append(user.id)
+
+            if seller_ids:
+                through = CommissionGroup.sellers.through
+                through.objects.filter(user_id__in=seller_ids).exclude(
+                    commissiongroup_id=pk,
+                ).delete()
+        else:
+            return Response(
+                {"detail": "Permissão negada."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        seller_ids = list(dict.fromkeys(seller_ids))
+        leader_ids = list(dict.fromkeys(leader_ids))
+
+        commission_group.leaders.set(leader_ids)
+        commission_group.sellers.set(seller_ids)
+
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

@@ -1,0 +1,7 @@
+---
+import AuthLayout from '../layouts/AuthLayout.astro';
+import { LoginForm } from '../components/react/domain/auth/LoginForm';
+---
+<AuthLayout>
+  <LoginForm client:only="react" />
+</AuthLayout>

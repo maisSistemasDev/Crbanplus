@@ -1,10 +1,12 @@
 import logging
+import re
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions
 from django.shortcuts import get_object_or_404
-from django.db.models import Count, Q
+from django.db import transaction
+from django.db.models import CharField, Count, Func, Prefetch, Q
 import pandas as pd
 import datetime
 from django.http import FileResponse
@@ -19,9 +21,12 @@ from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser, FormParser
 from datetime import datetime
 import uuid
-from .utils import read_file_columns, get_required_fields, get_model_fields, file_to_dict
+from .utils import read_file_columns, get_required_fields, get_layout_mapping_fields, file_to_dict
+from .preview_matcher import BatchPreviewMatcher
+from .services import proposal_queryset_for_actor, proposal_batch_queryset_for_actor
+from .proposal_query import StripNonDigits, apply_proposal_filters
 
-from .models import Proposal, Layout, LayoutField, ProposalFile, ProposalBatch
+from .models import Proposal, Layout, LayoutField, ProposalFile, ProposalBatch, ErroredProposal
 from .serializers import *
 from core.permissions import IsGerente, IsGerenteOrLider, IsAdmin
 from core.services import AuditService, LogService
@@ -31,6 +36,7 @@ from django.contrib.auth.models import User
 from .models import Bank, Agreement, ProposalBatch, ErroredProposal, StatusPayment
 from celery.result import AsyncResult
 from core.base_views import BaseApiView
+from core.search_utils import split_filter_values
 from bank.models import Table, Agreement, Bank
 from bank_access.models import BankAccess
 from payments.models import Payment, Commission
@@ -38,6 +44,67 @@ from .tasks import process_proposal_batch, process_proposal_batch_with_pipeline
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
+
+
+def filtered_proposals_for(request):
+    """Propostas do escopo do usuário já com os filtros da tela aplicados."""
+    proposals = proposal_queryset_for_actor(
+        Proposal.objects.select_related(
+            'seller', 'company', 'bank', 'agreement', 'table', 'batch', 'bank_access',
+        ).prefetch_related(
+            Prefetch(
+                'commissions',
+                queryset=Commission.objects.select_related(
+                    'user', 'company', 'payment', 'commission_config',
+                ),
+            ),
+            'claims__charged_company',
+            'claims__correct_company',
+        ),
+        request.user,
+    )
+    return apply_proposal_filters(request, proposals)
+
+
+def delete_proposal_batch(proposal_batch: ProposalBatch) -> dict:
+    """
+    Remove lote e tudo vinculado: propostas, erros, comissões não pagas e logs.
+    Bloqueia apenas se houver comissão já paga.
+    """
+    proposal_ids = list(
+        Proposal.objects.filter(batch=proposal_batch).values_list('id', flat=True)
+    )
+
+    paid_count = Commission.objects.filter(
+        proposal_id__in=proposal_ids,
+        release_status=Commission.PAID,
+    ).count()
+    if paid_count:
+        raise ValueError(
+            f'Não é possível excluir este lote. Existem {paid_count} comissões já pagas.'
+        )
+
+    payment_ids = list(
+        Commission.objects.filter(proposal_id__in=proposal_ids)
+        .exclude(payment_id=None)
+        .values_list('payment_id', flat=True)
+        .distinct()
+    )
+    commissions_deleted, _ = Commission.objects.filter(proposal_id__in=proposal_ids).delete()
+    Payment.objects.filter(id__in=payment_ids, commissions__isnull=True).delete()
+    proposals_count = len(proposal_ids)
+    errored_count = ErroredProposal.objects.filter(batch=proposal_batch).count()
+
+    batch_id = proposal_batch.id
+    proposal_batch.delete()
+
+    return {
+        'batch_id': batch_id,
+        'deleted_proposals': proposals_count,
+        'deleted_errored': errored_count,
+        'deleted_commissions': commissions_deleted,
+    }
+
 
 def normalize_value(value):
     value = value.lower()
@@ -81,7 +148,7 @@ class ProposalFieldsView(BaseApiView):
         Retorna todos os campos do modelo Proposal e identifica quais são obrigatórios.
         """
         required_fields = get_required_fields()
-        model_fields = get_model_fields()
+        model_fields = get_layout_mapping_fields()
         
         # Registra a ação usando o método da classe base
         self.log_info(
@@ -110,8 +177,7 @@ class ReadFileView(BaseApiView):
             )
             columns_order = read_file_columns(proposal_file.file.path)
             
-           # Obter todos os campos do modelo com suas propriedades
-            model_fields = get_model_fields(exclude_fields=['id', 'created_at', 'uploaded_at', 'files', 'bank', 'updated_at', 'original_data','batch','company','hash'])
+            model_fields = get_layout_mapping_fields()
             
             return Response(status=status.HTTP_200_OK, data={
                 'columns_order': columns_order,
@@ -137,6 +203,17 @@ class LayoutView(BaseApiView):
         )
         
         mapping = request.data.get('mapping')
+        # Validação: pelo menos um dos campos "digitador" ou "bank_access" deve estar mapeado
+        mapped_names = set(mapping.keys()) if mapping else set()
+        if not mapped_names.intersection({'digitador', 'bank_access'}):
+            return Response(
+                status=status.HTTP_400_BAD_REQUEST,
+                data={
+                    'error': 'Layout deve possuir pelo menos um dos campos mapeados: "Digitador" ou "Acessos".',
+                    'code': 'missing_digitador_or_access'
+                }
+            )
+
         for column, obj in mapping.items():
             # Suporta múltiplas colunas por campo (obj pode ser uma lista)
             if isinstance(obj, list):
@@ -169,6 +246,33 @@ class LayoutView(BaseApiView):
         layout.delete()
         return Response(status=status.HTTP_200_OK)
 
+
+class LayoutBulkDeleteView(BaseApiView):
+    """
+    API endpoint para exclusão em massa de layouts.
+    Recebe uma lista de IDs via body: {"ids": ["uuid1", "uuid2", ...]}
+    """
+    permission_classes = [IsAdmin]
+
+    def delete(self, request, format=None):
+        ids = request.data.get('ids', [])
+        if not ids or not isinstance(ids, list):
+            return Response({"detail": "Forneça uma lista de IDs em 'ids'."}, status=status.HTTP_400_BAD_REQUEST)
+
+        layouts = Layout.objects.filter(id__in=ids)
+        deleted_count = layouts.count()
+        layouts.delete()
+
+        self.log_info(
+            request=request,
+            action='bulk_delete_layouts',
+            message=f'Usuário excluiu {deleted_count} layout(s) em massa.',
+            data={'ids': ids, 'deleted_count': deleted_count}
+        )
+
+        return Response({"deleted": deleted_count}, status=status.HTTP_200_OK)
+
+
     def put(self, request, pk):
         layout = Layout.objects.get(id=pk)
         layout.name = request.data.get('name')
@@ -184,6 +288,7 @@ class LayoutView(BaseApiView):
         layout.save()
         return Response(status=status.HTTP_200_OK)
 
+
 class LayoutFormFieldsView(BaseApiView):
     """
     View para gerenciar os campos de layout.
@@ -198,9 +303,16 @@ class LayoutFormFieldsView(BaseApiView):
 class ProposalBatchView(BaseApiView):
     """
     View para processar um arquivo de proposta em lote.
+    Leitura (GET) é liberada para toda a hierarquia (filtrada); escrita é restrita ao admin.
     """
     parser_classes = (MultiPartParser, FormParser)
-    permission_classes = [IsAdmin]
+
+    def get_permissions(self):
+        if self.request.method == 'GET':
+            permission_classes = [permissions.IsAuthenticated]
+        else:
+            permission_classes = [IsAdmin]
+        return [permission() for permission in permission_classes]
 
     def post(self, request):
         file = request.data.get('file')
@@ -224,11 +336,12 @@ class ProposalBatchView(BaseApiView):
         return Response(status=status.HTTP_200_OK, data=ProposalBatchSerializer(proposal_batch).data)
     
     def get(self, request, pk=None):
+        batches = proposal_batch_queryset_for_actor(ProposalBatch.objects.all(), request.user)
         if pk:
-            proposal_batch = ProposalBatch.objects.get(id=pk)
+            proposal_batch = get_object_or_404(batches, id=pk)
             return Response(status=status.HTTP_200_OK, data=ProposalBatchSerializer(proposal_batch).data)
-        proposal_batches = ProposalBatch.objects.all()
-        return Response(status=status.HTTP_200_OK, data=ProposalBatchSerializer(proposal_batches, many=True).data)
+        batches = batches.order_by('-created_at')
+        return Response(status=status.HTTP_200_OK, data=ProposalBatchSerializer(batches, many=True).data)
     
     def put(self, request, pk):
         proposal_batch = ProposalBatch.objects.get(id=pk)
@@ -259,47 +372,44 @@ class ProposalBatchView(BaseApiView):
 
     def delete(self, request, pk):
         try:
-            proposal_batch = ProposalBatch.objects.get(id=pk)
+            proposal_batch = get_object_or_404(ProposalBatch, id=pk)
 
-            # Verificar se existem comissões geradas a partir deste lote
-            commission_count = Commission.objects.filter(
-                proposal__batch=proposal_batch
-            ).count()
-
-            if commission_count > 0:
-                return Response(
-                    {
-                        'detail': f'Não é possível deletar este lote. Existem {commission_count} comissões geradas.',
-                        'commission_count': commission_count
-                    },
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-            # Se não houver comissões, deletar o lote
-            batch_id = proposal_batch.id
-            proposal_batch.delete()
+            with transaction.atomic():
+                result = delete_proposal_batch(proposal_batch)
 
             self.log_info(
                 request=request,
                 action='delete_batch',
-                message=f'Lote {batch_id} deletado com sucesso'
+                message=(
+                    f"Lote {result['batch_id']} deletado "
+                    f"({result['deleted_proposals']} propostas, "
+                    f"{result['deleted_commissions']} comissões)"
+                ),
             )
 
             return Response(
-                {'detail': 'Lote deletado com sucesso'},
-                status=status.HTTP_204_NO_CONTENT
+                {
+                    'detail': 'Lote e propostas vinculadas deletados com sucesso',
+                    **result,
+                },
+                status=status.HTTP_200_OK,
             )
 
         except ProposalBatch.DoesNotExist:
             return Response(
                 {'detail': 'Lote não encontrado'},
-                status=status.HTTP_404_NOT_FOUND
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except ValueError as e:
+            return Response(
+                {'detail': str(e)},
+                status=status.HTTP_400_BAD_REQUEST,
             )
         except Exception as e:
             logger.error(f"Erro ao deletar lote: {str(e)}")
             return Response(
                 {'detail': f'Erro ao deletar lote: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
 
@@ -308,46 +418,18 @@ class ProposalPreviewView(BaseApiView):
     View para visualizar as propostas antes de processar o arquivo em lote.
     """
     permission_classes = [IsAdmin]
-    
-    
-    
-    def match_object(self, object_name, value):
-        try:
-            value = normalize_value(value)
-            if(object_name == 'table'):
-                table = Table.objects.filter(name_in_bank__icontains=value).first()
-                if(not table):
-                    tables = Table.objects.all()
-                    for table in tables:
-                        if(value in table.alias):
-                            return table
-                    return None
-                return table
-            elif(object_name == 'agreement'):
-                agreement = Agreement.objects.filter(name__icontains=value).first()
-                if(not agreement):
-                    agreements = Agreement.objects.all()
-                    for agreement in agreements:
-                        if(value in agreement.alias):
-                            return agreement
-                    return None
-                return agreement
-            elif(object_name == 'user'):
-                user = BankAccess.objects.filter(username__icontains=value).first()
-                if(not user):
-                    users = BankAccess.objects.all()
-                    for user in users:
-                        if(value in user.alias):
-                            return user.user
-                    return None
-                return user.user
-        except Exception as e:
-            logger.error(e)
-            return None
+
     def get(self, request, pk):
-        proposal_batch = ProposalBatch.objects.get(id=pk)
+        proposal_batch = (
+            ProposalBatch.objects.select_related('layout__bank', 'file')
+            .prefetch_related('layout__map_fields')
+            .get(id=pk)
+        )
         file_path = proposal_batch.file.file.path
         data = file_to_dict(file_path)
+        bank = proposal_batch.layout.bank
+        matcher = BatchPreviewMatcher(bank)
+
         relation_tables = []
         relation_users = []
         relation_agreements = []
@@ -357,11 +439,11 @@ class ProposalPreviewView(BaseApiView):
         agreements_seen = set()
         statuses_seen = set()
 
-        # Resolve field mappings once (outside the loop)
-        table_field = proposal_batch.layout.map_fields.filter(name='table').first()
-        user_field = proposal_batch.layout.map_fields.filter(name='seller').first()
-        agreement_field = proposal_batch.layout.map_fields.filter(name='agreement').first()
-        status_field = proposal_batch.layout.map_fields.filter(name='status').first()
+        field_by_name = {f.name: f for f in proposal_batch.layout.map_fields.all()}
+        table_field = field_by_name.get('table')
+        user_field = field_by_name.get('bank_access') or field_by_name.get('seller')
+        agreement_field = field_by_name.get('agreement')
+        status_field = field_by_name.get('status')
 
         for row in data:
             # Lookup by header_name (dict key) instead of positional index
@@ -377,7 +459,7 @@ class ProposalPreviewView(BaseApiView):
             table_name = get_value(table_field)
             if table_name and table_name not in tables_seen:
                 tables_seen.add(table_name)
-                table = self.match_object('table', table_name)
+                table = matcher.match_table(table_name)
                 if table:
                     # Use agreement name for display instead of table ID
                     display_name = table.agreement.name if table.agreement else table.name_in_bank
@@ -389,7 +471,7 @@ class ProposalPreviewView(BaseApiView):
             user_name = get_value(user_field)
             if user_name and user_name not in users_seen:
                 users_seen.add(user_name)
-                user = self.match_object('user', user_name)
+                user = matcher.match_user(user_name)
                 if user:
                     relation_users.append({'name_in_bank': user_name, 'id': user.id, 'name': user.first_name, 'type': 'user'})
                 else:
@@ -399,7 +481,7 @@ class ProposalPreviewView(BaseApiView):
             agreement_name = get_value(agreement_field)
             if agreement_name and agreement_name not in agreements_seen:
                 agreements_seen.add(agreement_name)
-                agreement = self.match_object('agreement', agreement_name)
+                agreement = matcher.match_agreement(agreement_name)
                 if agreement:
                     relation_agreements.append({'name_in_bank': agreement_name, 'id': agreement.id, 'name': agreement.name, 'type': 'agreement'})
                 else:
@@ -409,16 +491,7 @@ class ProposalPreviewView(BaseApiView):
             status_name = get_value(status_field)
             if status_name and status_name not in statuses_seen:
                 statuses_seen.add(status_name)
-                bank = proposal_batch.layout.bank
-                status_name_lower = status_name.lower().strip()
-                # First try exact name match
-                status_payment = StatusPayment.objects.filter(name=status_name, bank=bank).first()
-                # Then try alias match (iterate like other categories)
-                if not status_payment:
-                    for sp in StatusPayment.objects.filter(bank=bank):
-                        if sp.alias and status_name_lower in [a.lower().strip() for a in sp.alias]:
-                            status_payment = sp
-                            break
+                status_payment = matcher.match_status(status_name)
                 if status_payment:
                     relation_statuses.append({'name_in_bank': status_name, 'id': status_payment.id, 'name': status_payment.name, 'type': 'status'})
                 else:
@@ -541,80 +614,71 @@ class UserNamesView(BaseApiView):
 class ProposalsByBatchView(BaseApiView):
     """
     View para obter as propostas por lote.
+    Leitura (GET) liberada para toda a hierarquia (filtrada por vendedor/equipe/empresa); exclusão restrita ao admin.
     """
-    permission_classes = [IsAdmin]
-    
+    def get_permissions(self):
+        if self.request.method == 'GET':
+            permission_classes = [permissions.IsAuthenticated]
+        else:
+            permission_classes = [IsAdmin]
+        return [permission() for permission in permission_classes]
+
     def get(self, request, pk):
-        proposal_batch = ProposalBatch.objects.get(id=pk)
-        proposals = Proposal.objects.filter(batch=proposal_batch)
-        return Response(status=status.HTTP_200_OK, data=ProposalSerializer(proposals, many=True).data)
+        proposal_batch = get_object_or_404(
+            proposal_batch_queryset_for_actor(ProposalBatch.objects.all(), request.user),
+            id=pk,
+        )
+        proposals = proposal_queryset_for_actor(
+            Proposal.objects.filter(batch=proposal_batch).select_related(
+                'seller', 'company', 'bank', 'agreement', 'table', 'bank_access',
+            ).prefetch_related(
+                Prefetch(
+                    'commissions',
+                    queryset=Commission.objects.select_related(
+                        'user', 'company', 'payment', 'commission_config',
+                    ),
+                ),
+                'claims__charged_company',
+                'claims__correct_company',
+            ),
+            request.user,
+        )
+        return Response(
+            status=status.HTTP_200_OK,
+            data=ProposalSerializer(proposals, many=True, context={'request': request}).data,
+        )
     
     def delete(self, request, pk):
-        proposal_batch = ProposalBatch.objects.get(id=pk)
-        proposals = Proposal.objects.filter(batch=proposal_batch)
-        check = Commission.objects.filter(proposal__in=[p.id for p in proposals], released=True).exists()
-        if check:
-            return Response(status=status.HTTP_400_BAD_REQUEST, data={'error': 'Não é possível excluir propostas com comissões liberadas.'})
-        for proposal in proposals:
-            Commission.objects.filter(proposal=proposal).delete()
-            proposal.delete()
-        proposal_batch.delete()
-        return Response(status=status.HTTP_200_OK, data={'message': 'Propostas e lote excluídos com sucesso'})
+        try:
+            proposal_batch = get_object_or_404(ProposalBatch, id=pk)
+            with transaction.atomic():
+                result = delete_proposal_batch(proposal_batch)
+            return Response(
+                status=status.HTTP_200_OK,
+                data={
+                    'message': 'Propostas e lote excluídos com sucesso',
+                    **result,
+                },
+            )
+        except ValueError as e:
+            return Response(
+                status=status.HTTP_400_BAD_REQUEST,
+                data={'error': str(e)},
+            )
 
 class ProposalListView(BaseApiView):
     """
     View para listar propostas com filtros e paginação.
+    Leitura liberada para toda a hierarquia; cada perfil só vê as propostas da própria rede.
     """
-    permission_classes = [IsAdmin]
+    permission_classes = [permissions.IsAuthenticated]
     
     def get(self, request):
         # Paginação
         page = int(request.GET.get('page', 1))
         page_size = int(request.GET.get('page_size', 20))
         
-        # Filtros
-        bank_id = request.GET.get('bank')
-        client_cpf = request.GET.get('client_cpf')
-        company_id = request.GET.get('company')
-        seller_id = request.GET.get('seller')
-        contract_number = request.GET.get('contract_number')
-        begin_date = request.GET.get('begin_date')
-        end_date = request.GET.get('end_date')
-        agreement_id = request.GET.get('agreement')
-        table_id = request.GET.get('table')
-        search = request.GET.get('search')
-        
-        # Query base
-        proposals = Proposal.objects.select_related(
-            'seller', 'company', 'bank', 'agreement', 'table', 'batch'
-        ).all()
-        
-        # Aplicar filtros
-        if bank_id:
-            proposals = proposals.filter(bank_id=bank_id)
-        if client_cpf:
-            proposals = proposals.filter(client_document__icontains=client_cpf)
-        if company_id:
-            proposals = proposals.filter(company_id=company_id)
-        if seller_id:
-            proposals = proposals.filter(seller_id=seller_id)
-        if contract_number:
-            proposals = proposals.filter(contract_number__icontains=contract_number)
-        if agreement_id:
-            proposals = proposals.filter(agreement_id=agreement_id)
-        if table_id:
-            proposals = proposals.filter(table_id=table_id)
-        if begin_date and end_date:
-            proposals = proposals.filter(created_at__range=(begin_date, end_date))
-        if search:
-            proposals = proposals.filter(
-                Q(contract_number__icontains=search) |
-                Q(client_document__icontains=search) |
-                Q(client_name__icontains=search)
-            )
-        
-        # Ordenar
-        proposals = proposals.order_by('-created_at')
+        proposals = filtered_proposals_for(request).order_by('-created_at')
         
         # Contar total
         total_count = proposals.count()
@@ -628,7 +692,7 @@ class ProposalListView(BaseApiView):
             'count': total_count,
             'page': page,
             'page_size': page_size,
-            'results': ProposalSerializer(proposals, many=True).data
+            'results': ProposalSerializer(proposals, many=True, context={'request': request}).data
         })
 
 

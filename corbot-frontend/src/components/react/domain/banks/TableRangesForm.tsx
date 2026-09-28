@@ -3,21 +3,29 @@ import { api } from '../../../../lib/api/client';
 import { ENDPOINTS } from '../../../../lib/api/endpoints';
 import { Input } from '../../ui/Input';
 import { Select } from '../../ui/Select';
+import { SearchSelect } from '../../ui/SearchSelect';
 import { Button } from '../../ui/Button';
 import { Plus, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+
+const RANGE_KIND_OPTIONS = [
+  { value: 'rate', label: 'Taxa (%)' },
+  { value: 'fixed', label: 'Valor (R$)' },
+];
 
 interface CommissionRange {
   id?: string;
   min_value: string;
   max_value: string;
-  commission_rate: string;
+  kind: 'rate' | 'fixed';
+  amount: string;
 }
 
 interface TableFormValues {
   bank: string;
   agreement: string;
   name_in_bank: string;
+  code_in_bank: string;
   vigency_date: string;
   is_active: boolean;
   commission_ranges: CommissionRange[];
@@ -36,7 +44,18 @@ interface TableRangesFormProps {
 }
 
 function emptyRange(): CommissionRange {
-  return { min_value: '', max_value: '', commission_rate: '' };
+  return { min_value: '0', max_value: '0', kind: 'rate', amount: '' };
+}
+
+function rangeFromApi(r: Record<string, unknown>): CommissionRange {
+  const hasFixed = r.fixed_value !== null && r.fixed_value !== undefined && r.fixed_value !== '';
+  return {
+    id: r.id != null ? String(r.id) : undefined,
+    min_value: String(r.min_value ?? '0'),
+    max_value: String(r.max_value ?? '0'),
+    kind: hasFixed ? 'fixed' : 'rate',
+    amount: hasFixed ? String(r.fixed_value) : String(r.commission_rate ?? ''),
+  };
 }
 
 export function TableRangesForm({ item, onSubmit, onClose, saving }: TableRangesFormProps) {
@@ -47,6 +66,7 @@ export function TableRangesForm({ item, onSubmit, onClose, saving }: TableRanges
     bank: '',
     agreement: '',
     name_in_bank: '',
+    code_in_bank: '',
     vigency_date: '',
     is_active: true,
     commission_ranges: [emptyRange()],
@@ -56,18 +76,14 @@ export function TableRangesForm({ item, onSubmit, onClose, saving }: TableRanges
   useEffect(() => {
     if (item) {
       const ranges: CommissionRange[] = Array.isArray(item.commission_ranges)
-        ? (item.commission_ranges as any[]).map((r) => ({
-            id: r.id,
-            min_value: String(r.min_value ?? ''),
-            max_value: String(r.max_value ?? ''),
-            commission_rate: String(r.commission_rate ?? ''),
-          }))
+        ? (item.commission_ranges as Record<string, unknown>[]).map(rangeFromApi)
         : [emptyRange()];
 
       setValues({
         bank: String(item.bank ?? ''),
         agreement: String(item.agreement ?? ''),
         name_in_bank: String(item.name_in_bank ?? ''),
+        code_in_bank: String(item.code_in_bank ?? ''),
         vigency_date: String(item.vigency_date ?? ''),
         is_active: item.is_active !== false,
         commission_ranges: ranges.length > 0 ? ranges : [emptyRange()],
@@ -123,8 +139,8 @@ export function TableRangesForm({ item, onSubmit, onClose, saving }: TableRanges
 
     for (let i = 0; i < values.commission_ranges.length; i++) {
       const r = values.commission_ranges[i];
-      if (!r.min_value || !r.max_value || !r.commission_rate) {
-        toast.error(`Faixa ${i + 1}: preencha todos os campos (min, max, taxa)`);
+      if (r.min_value === '' || r.max_value === '' || !r.amount) {
+        toast.error(`Faixa ${i + 1}: preencha mínimo, máximo e ${r.kind === 'fixed' ? 'valor fixo' : 'taxa'}`);
         return;
       }
     }
@@ -133,12 +149,14 @@ export function TableRangesForm({ item, onSubmit, onClose, saving }: TableRanges
       bank: values.bank,
       agreement: values.agreement,
       name_in_bank: values.name_in_bank,
+      code_in_bank: values.code_in_bank || null,
       vigency_date: values.vigency_date,
       is_active: values.is_active,
       commission_ranges: values.commission_ranges.map((r) => ({
         min_value: parseFloat(r.min_value),
         max_value: parseFloat(r.max_value),
-        commission_rate: parseFloat(r.commission_rate),
+        commission_rate: r.kind === 'rate' ? parseFloat(r.amount) : 0,
+        fixed_value: r.kind === 'fixed' ? parseFloat(r.amount) : null,
       })),
     };
 
@@ -173,13 +191,25 @@ export function TableRangesForm({ item, onSubmit, onClose, saving }: TableRanges
           onChange={(e) => setField('name_in_bank', e.target.value)}
         />
         <Input
-          label="Data de Vigência"
+          label="Codigo da Tabela"
+          type="text"
+          value={values.code_in_bank}
+          onChange={(e) => setField('code_in_bank', e.target.value)}
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <Input
+          label="Vigência (início)"
           type="date"
           required
           value={values.vigency_date}
           onChange={(e) => setField('vigency_date', e.target.value)}
         />
       </div>
+      <p className="text-xs text-gray-500 -mt-2">
+        Data em que a tabela passa a valer. Não é data de término — vigência em 2025 continua válida em 2026.
+      </p>
 
       <div className="flex items-center gap-2">
         <input
@@ -203,19 +233,24 @@ export function TableRangesForm({ item, onSubmit, onClose, saving }: TableRanges
         </div>
 
         <div className="flex flex-col gap-3">
+          <p className="text-xs text-gray-500">
+            Use 0 e 0 em mínimo e máximo para valer em qualquer valor de proposta. Escolha taxa percentual ou valor fixo em reais.
+          </p>
+
           {/* Header */}
-          <div className="grid grid-cols-[1fr_1fr_1fr_2rem] gap-2 text-xs font-medium text-gray-500 px-1">
+          <div className="grid grid-cols-[1fr_1fr_8.5rem_1fr_2rem] gap-2 text-xs font-medium text-gray-500 px-1">
             <span>Valor Mínimo (R$)</span>
             <span>Valor Máximo (R$)</span>
-            <span>Taxa (%)</span>
+            <span>Tipo</span>
+            <span>Comissão</span>
             <span />
           </div>
 
           {values.commission_ranges.map((range, i) => (
-            <div key={i} className="grid grid-cols-[1fr_1fr_1fr_2rem] gap-2 items-center">
+            <div key={i} className="grid grid-cols-[1fr_1fr_8.5rem_1fr_2rem] gap-2 items-center">
               <Input
                 type="number"
-                placeholder="Ex: 50.00"
+                placeholder="0"
                 step="0.01"
                 min="0"
                 required
@@ -224,22 +259,27 @@ export function TableRangesForm({ item, onSubmit, onClose, saving }: TableRanges
               />
               <Input
                 type="number"
-                placeholder="Ex: 1000.00"
+                placeholder="0"
                 step="0.01"
                 min="0"
                 required
                 value={range.max_value}
                 onChange={(e) => setRange(i, 'max_value', e.target.value)}
               />
+              <SearchSelect
+                value={range.kind}
+                options={RANGE_KIND_OPTIONS}
+                onChange={(e) => setRange(i, 'kind', e.target.value as CommissionRange['kind'])}
+              />
               <Input
                 type="number"
-                placeholder="Ex: 25"
+                placeholder={range.kind === 'fixed' ? 'Ex: 960' : 'Ex: 25'}
                 step="0.01"
                 min="0"
-                max="100"
+                max={range.kind === 'rate' ? '100' : undefined}
                 required
-                value={range.commission_rate}
-                onChange={(e) => setRange(i, 'commission_rate', e.target.value)}
+                value={range.amount}
+                onChange={(e) => setRange(i, 'amount', e.target.value)}
               />
               <button
                 type="button"

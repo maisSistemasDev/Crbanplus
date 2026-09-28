@@ -4,7 +4,7 @@ Views relacionadas a operações com comissões.
 import logging
 import uuid
 from decimal import Decimal
-from datetime import datetime, timedelta
+from datetime import datetime
 from rest_framework.response import Response
 from rest_framework import status, permissions
 from django.shortcuts import get_object_or_404
@@ -20,6 +20,15 @@ from core.models import User
 from payments.models import Commission, Payment
 from payments.serializers import CommissionSerializer, CommissionMirrorSerializer
 from payments.pipeline.commission_pipeline import GenerateCommissionsPipeline
+from payments.services.commission_query import (
+    build_debit_projection,
+    commission_amounts,
+    commission_queryset,
+    consolidate_commissions,
+    filter_by_debit,
+    totals_from,
+)
+from payments.models import CommissionDebitDiscount, UserDebit
 from core.utils import UserInstance
 
 logger = logging.getLogger(__name__)
@@ -49,53 +58,20 @@ class CommissionListCreateView(BaseApiView):
     def get_permissions(self):
         permission_classes = [permissions.IsAuthenticated]
         return [permission() for permission in permission_classes]
-    
+
     def get(self, request, format=None):
         """
-        Lista as comissões.
+        Lista as comissões (detalhado), já com débito projetado e total.
         """
-        begin_date = request.GET.get('begin_date') or datetime.now() - timedelta(days=30)
-        end_date = request.GET.get('end_date') or datetime.now()
-        client_document = request.GET.get('client_document')
-        client_name = request.GET.get('client_name')
-        commissions = Commission.objects.filter(created_at__range=[begin_date, end_date])
-        if request.user.role == User.VENDEDOR:
-            commissions = commissions.filter(
-                user=request.user,
-                release_status__in=[Commission.WITHDRAW_AVAILABLE, Commission.PENDING_MANUAL_PAYMENT]
-            )
-        elif request.user.role == User.LIDER:
-            commissions = commissions.filter(
-                Q(user=request.user) | Q(user__leader=request.user),
-                release_status__in=[Commission.WITHDRAW_AVAILABLE, Commission.PENDING_MANUAL_PAYMENT]
-            )
-        elif request.user.role == User.GERENTE:
-            commissions = commissions.filter(
-                user=request.user,
-                release_status__in=[Commission.WITHDRAW_AVAILABLE, Commission.PENDING_MANUAL_PAYMENT]
-            )
-        elif request.user.role == User.EMPRESA_ADMIN:
-            commissions = commissions.filter(company=request.user.company)
-        elif(request.user.role != User.ADMIN):
+        commissions = commission_queryset(request)
+        if commissions is None:
             return Response({"detail": "Você não tem permissão para acessar esta página."}, status=status.HTTP_403_FORBIDDEN)
-        
-        if(client_document):
-            commissions = commissions.filter(proposal__client_document=client_document)
-        if(client_name):
-            commissions = commissions.filter(proposal__client_name=client_name)
-        if(request.GET.get('user')):
-            commissions = commissions.filter(user_id=request.GET.get('user'))
-        if(request.GET.get('company')):
-            commissions = commissions.filter(company_id=request.GET.get('company'))
-        if(request.GET.get('role')):
-            commissions = commissions.filter(role=request.GET.get('role'))
-        if(request.GET.get('payment_id')):
-            commissions = commissions.filter(payment_id=request.GET.get('payment_id'))
-        if(request.GET.get('proposal_id')):
-            commissions = commissions.filter(proposal_id=request.GET.get('proposal_id'))
-        if(request.GET.get('status')):
-            commissions = commissions.filter(payment__status=request.GET.get('status'))
-        serializer = CommissionSerializer(commissions, many=True)
+
+        items = list(commissions)
+        projection = build_debit_projection(items)
+        items = filter_by_debit(items, projection, request.GET.get('debit_filter'))
+
+        serializer = CommissionSerializer(items, many=True, context={'debit_projection': projection})
         return Response(serializer.data)
 
     def patch(self, request, format=None):
@@ -135,6 +111,144 @@ class CommissionListCreateView(BaseApiView):
                 payment.save()
             commission.save()
         return Response({"detail": "Comissões liberadas com sucesso"}, status=status.HTTP_200_OK)
+
+class CommissionConsolidatedView(BaseApiView):
+    """
+    Comissões somadas por recebedor, respeitando os filtros atuais da tela.
+
+    Só consolida comissões não liberadas: o consolidado existe para montar o
+    próximo lote de pagamento, então comissões já liberadas ou pagas ficam fora.
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, format=None):
+        commissions = commission_queryset(request)
+        if commissions is None:
+            return Response({"detail": "Você não tem permissão para acessar esta página."}, status=status.HTTP_403_FORBIDDEN)
+
+        commissions = commissions.filter(release_status=Commission.NOT_RELEASED)
+
+        items = list(commissions)
+        projection = build_debit_projection(items)
+        items = filter_by_debit(items, projection, request.GET.get('debit_filter'))
+
+        return Response({
+            'consolidated': True,
+            'release_status': Commission.NOT_RELEASED,
+            'results': consolidate_commissions(items, projection),
+            'totals': totals_from(items, projection),
+        })
+
+
+class CommissionDebitDetailView(BaseApiView):
+    """Detalha quais débitos compõem o desconto de uma ou mais comissões."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, format=None):
+        commission_ids = request.data.get('commission_ids') or []
+        if isinstance(commission_ids, str):
+            commission_ids = [item for item in commission_ids.split(',') if item.strip()]
+        if not commission_ids:
+            return Response({"detail": "É necessário informar os commission_ids."}, status=status.HTTP_400_BAD_REQUEST)
+
+        allowed = commission_queryset(request)
+        if allowed is None:
+            return Response({"detail": "Você não tem permissão para acessar esta página."}, status=status.HTTP_403_FORBIDDEN)
+
+        commissions = list(
+            Commission.objects.filter(id__in=commission_ids)
+            .select_related('proposal', 'user', 'company')
+        )
+        visible_ids = set(
+            Commission.objects.filter(id__in=[c.id for c in commissions]).values_list('id', flat=True)
+        ) & set(allowed.values_list('id', flat=True))
+        commissions = [commission for commission in commissions if commission.id in visible_ids]
+
+        if not commissions:
+            return Response({'results': [], 'total': '0'})
+
+        # Débitos já abatidos nestas comissões
+        entries: dict[int, dict] = {}
+        applied = (
+            CommissionDebitDiscount.objects
+            .filter(commission_id__in=[commission.id for commission in commissions])
+            .select_related('debit', 'debit__user', 'debit__company', 'commission__proposal')
+        )
+        for discount in applied:
+            entry = entries.setdefault(discount.debit_id, {
+                'debit_id': discount.debit_id,
+                'reason': discount.debit.reason,
+                'origin': discount.debit.origin,
+                'owner_name': discount.debit.owner_label,
+                'debit_amount': str(discount.debit.amount),
+                'remaining_amount': str(discount.debit.remaining_amount),
+                'created_at': discount.debit.created_at.isoformat(),
+                'projected': False,
+                'amount': Decimal('0'),
+                'commissions': [],
+            })
+            entry['amount'] += Decimal(str(discount.amount))
+            entry['commissions'].append({
+                'commission_id': discount.commission_id,
+                'amount': str(discount.amount),
+                'contract_number': getattr(discount.commission.proposal, 'contract_number', None),
+                'client_name': getattr(discount.commission.proposal, 'client_name', None),
+            })
+
+        # Débitos que ainda serão abatidos na próxima liberação
+        pending = [
+            commission for commission in commissions
+            if Decimal(str(commission.debit_discount or 0)) <= 0
+        ]
+        projection = build_debit_projection(pending)
+        projected_debit_ids = {
+            item['debit_id']
+            for data in projection.values()
+            for item in data.get('items', [])
+        }
+        debits_by_id = {
+            debit.id: debit
+            for debit in UserDebit.objects.filter(id__in=projected_debit_ids)
+            .select_related('user', 'company')
+        }
+        commissions_by_id = {commission.id: commission for commission in commissions}
+
+        for commission_id, data in projection.items():
+            for item in data.get('items', []):
+                debit = debits_by_id.get(item['debit_id'])
+                if not debit:
+                    continue
+                entry = entries.setdefault(debit.id, {
+                    'debit_id': debit.id,
+                    'reason': debit.reason,
+                    'origin': debit.origin,
+                    'owner_name': debit.owner_label,
+                    'debit_amount': str(debit.amount),
+                    'remaining_amount': str(debit.remaining_amount),
+                    'created_at': debit.created_at.isoformat(),
+                    'projected': True,
+                    'amount': Decimal('0'),
+                    'commissions': [],
+                })
+                entry['amount'] += Decimal(str(item['amount']))
+                commission = commissions_by_id.get(commission_id)
+                proposal = getattr(commission, 'proposal', None)
+                entry['commissions'].append({
+                    'commission_id': commission_id,
+                    'amount': str(item['amount']),
+                    'contract_number': getattr(proposal, 'contract_number', None),
+                    'client_name': getattr(proposal, 'client_name', None),
+                })
+
+        results = sorted(entries.values(), key=lambda item: item['created_at'])
+        total = sum((item['amount'] for item in results), Decimal('0'))
+        for item in results:
+            item['amount'] = str(item['amount'])
+
+        return Response({'results': results, 'total': str(total)})
+
 
 class CommissionMirrorView(BaseApiView):
     """
@@ -728,25 +842,38 @@ class GenerateComissionsView(BaseApiView):
             pipeline = GenerateCommissionsPipeline(batch_id=batch_id)
             result = pipeline.run()
             
+            stats = {
+                "total_proposals": result['total_proposals'],
+                "processed_proposals": result['processed_proposals'],
+                "created_commissions": result['created_commissions'],
+            }
+
+            if result['created_commissions'] == 0:
+                detail = (
+                    "Nenhuma comissão foi criada. Verifique regras do grupo, tabelas e se o lote "
+                    "ainda tem propostas sem comissão."
+                )
+                if result['total_proposals'] == 0:
+                    detail = (
+                        "Nenhuma proposta pendente para este lote (todas já possuem comissão ou "
+                        "foram marcadas sem valor calculado)."
+                    )
+                return Response(
+                    {"detail": detail, "statistics": stats, "errors": result.get('errors', [])},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
             # Verificar se a pipeline foi executada com sucesso
             if result['success']:
                 return Response({
                     "detail": "Comissões criadas com sucesso",
-                    "statistics": {
-                        "total_proposals": result['total_proposals'],
-                        "processed_proposals": result['processed_proposals'],
-                        "created_commissions": result['created_commissions']
-                    }
+                    "statistics": stats,
                 }, status=status.HTTP_201_CREATED)
             else:
                 return Response({
                     "detail": "Erro ao criar comissões",
                     "errors": result['errors'],
-                    "statistics": {
-                        "total_proposals": result['total_proposals'],
-                        "processed_proposals": result['processed_proposals'],
-                        "created_commissions": result['created_commissions']
-                    }
+                    "statistics": stats,
                 }, status=status.HTTP_400_BAD_REQUEST)
                 
         except Exception as e:

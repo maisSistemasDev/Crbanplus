@@ -18,7 +18,6 @@ interface SetupData {
     first_name: string;
     last_name: string;
     password: string;
-    password_confirm: string;
   };
 }
 
@@ -30,7 +29,7 @@ export function SetupPage() {
   const [error, setError] = useState('');
   const [data, setData] = useState<SetupData>({
     company: { name: '', cnpj: '', email: '' },
-    user: { cpf: '', email: '', first_name: '', last_name: '', password: '', password_confirm: '' },
+    user: { cpf: '', email: '', first_name: '', last_name: '', password: '' },
   });
 
   useEffect(() => {
@@ -62,11 +61,6 @@ export function SetupPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
-
-    if (data.user.password !== data.user.password_confirm) {
-      setError('As senhas não coincidem.');
-      return;
-    }
 
     if (data.user.password.length < 6) {
       setError('A senha deve ter pelo menos 6 caracteres.');
@@ -111,9 +105,9 @@ export function SetupPage() {
   return (
     <div className="w-full max-w-lg">
       <div className="bg-white rounded-xl shadow-lg p-8">
-        <div className="text-center mb-8">{config.systemName}
-          <h1 className="text-2xl font-bold text-gray-900">CorbanJet</h1>
-          <p className="text-sm text-gray-500 mt-1">Configuracao Inicial</p>
+        <div className="text-center mb-8">
+          <h1 className="page-title">{config.systemName}</h1>
+          <p className="page-subtitle">Configuração inicial</p>
           <div className="flex justify-center gap-2 mt-4">
             <div className={`h-2 w-16 rounded-full ${step >= 1 ? 'bg-[var(--color-primary)]' : 'bg-gray-200'}`} />
             <div className={`h-2 w-16 rounded-full ${step >= 2 ? 'bg-[var(--color-primary)]' : 'bg-gray-200'}`} />
@@ -216,16 +210,6 @@ export function SetupPage() {
                 type="password"
                 value={data.user.password}
                 onChange={(e) => updateUser('password', e.target.value)}
-                className={inputClass}
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Confirmar Senha</label>
-              <input
-                type="password"
-                value={data.user.password_confirm}
-                onChange={(e) => updateUser('password_confirm', e.target.value)}
                 className={inputClass}
                 required
               />

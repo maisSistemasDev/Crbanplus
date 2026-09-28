@@ -3,9 +3,7 @@ import { $currentUser } from '../../../lib/stores/auth';
 import { $whitelabel } from '../../../lib/stores/whitelabel';
 import type { Role } from '../../../lib/utils/roles';
 import {
-  LayoutDashboard, Building2, Users, Landmark, FileSpreadsheet,
-  Coins, UsersRound, KeyRound, CreditCard, Wallet, Code2,
-  BookOpen, Settings,
+  Users, Landmark, FileSpreadsheet, Coins, UsersRound, KeyRound, CreditCard, Receipt,
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -18,47 +16,41 @@ interface AppItem {
 
 function getAppItems(role: Role): AppItem[] {
   const all: Record<string, AppItem> = {
-    dashboard:    { icon: <LayoutDashboard size={28} />, label: 'Dashboard',         href: '/dashboard',                 color: '#3498db' },
-    corbans:      { icon: <Building2 size={28} />,       label: 'Corbans',           href: '/companies',                 color: '#8e44ad' },
-    empresa:      { icon: <Building2 size={28} />,       label: 'Minha Empresa',     href: '/companies',                 color: '#8e44ad' },
-    usuarios:     { icon: <Users size={28} />,           label: 'Usuários',          href: '/users',                     color: '#2980b9' },
-    equipe:       { icon: <Users size={28} />,           label: 'Minha Equipe',      href: '/users/sellers',             color: '#2980b9' },
-    bancos:       { icon: <Landmark size={28} />,        label: 'Bancos',            href: '/banks',                     color: '#16a085' },
-    propostas:    { icon: <FileSpreadsheet size={28} />, label: 'Propostas',         href: '/proposals',                 color: '#27ae60' },
-    lotes:        { icon: <FileSpreadsheet size={28} />, label: 'Lotes',             href: '/proposals/batches',         color: '#2ecc71' },
-    comissoes:    { icon: <Coins size={28} />,           label: 'Comissões',         href: '/commissions',               color: '#f39c12' },
-    espelho:      { icon: <Coins size={28} />,           label: 'Espelho',           href: '/commissions/mirror',        color: '#e67e22' },
-    gerarComis:   { icon: <Coins size={28} />,           label: 'Gerar Comissões',   href: '/commissions/generate',      color: '#d35400' },
-    equipesGrupo: { icon: <UsersRound size={28} />,      label: 'Equipes',           href: '/commission-groups',         color: '#1abc9c' },
-    pagamentos:   { icon: <CreditCard size={28} />,      label: 'Pagamentos',        href: '/payments',                  color: '#c0392b' },
-    saques:       { icon: <Wallet size={28} />,          label: 'Saques',            href: '/withdrawals/corbanpay',     color: '#2471a3' },
-    acessos:      { icon: <KeyRound size={28} />,        label: 'Acessos',           href: '/bank-access',               color: '#7f8c8d' },
-    configuracoes:{ icon: <Settings size={28} />,        label: 'Configurações',     href: '/settings',                  color: '#95a5a6' },
-    dev:          { icon: <Code2 size={28} />,           label: 'Desenvolvedor',     href: '/developer',                 color: '#34495e' },
-    docs:         { icon: <BookOpen size={28} />,        label: 'Documentação',      href: '/docs',                      color: '#5d6d7e' },
+    colaboradores:{ icon: <Users size={28} />,           label: 'Colaboradores', href: '/colaboradores',      color: '#1f6feb' },
+    bancos:       { icon: <Landmark size={28} />,        label: 'Bancos',        href: '/banks',              color: '#0f766e' },
+    convenios:    { icon: <Landmark size={28} />,        label: 'Convenios',     href: '/agreements',         color: '#0ea5e9' },
+    tabelas:      { icon: <FileSpreadsheet size={28} />, label: 'Tabelas',       href: '/tables',             color: '#4f46e5' },
+    equipes:      { icon: <UsersRound size={28} />,      label: 'Equipes',       href: '/commission-groups',  color: '#0891b2' },
+    propostas:    { icon: <FileSpreadsheet size={28} />, label: 'Propostas',     href: '/proposals',          color: '#16a34a' },
+    corbans:      { icon: <Users size={28} />,           label: 'Corbans',       href: '/users',              color: '#2563eb' },
+    acessos:      { icon: <KeyRound size={28} />,        label: 'Acessos',       href: '/bank-access',        color: '#334155' },
+    comissoes:    { icon: <Coins size={28} />,           label: 'Comissoes',     href: '/commissions',        color: '#f59e0b' },
+    pagamentos:   { icon: <CreditCard size={28} />,      label: 'Pagamentos',    href: '/payments',           color: '#dc2626' },
+    debitos:      { icon: <Receipt size={28} />,         label: 'Debitos',       href: '/debitos',            color: '#7c3aed' },
   };
 
+  const simplifiedItems: AppItem[] = [
+    all.colaboradores,
+    all.bancos,
+    all.convenios,
+    all.tabelas,
+    all.equipes,
+    all.propostas,
+    all.corbans,
+    all.acessos,
+    all.comissoes,
+    all.pagamentos,
+    all.debitos,
+  ];
+
   const byRole: Record<Role, AppItem[]> = {
-    admin: [
-      all.dashboard, all.corbans, all.usuarios, all.bancos, all.propostas,
-      all.lotes, all.comissoes, all.espelho, all.gerarComis, all.equipesGrupo,
-      all.pagamentos, all.acessos, all.configuracoes, all.dev, all.docs,
-    ],
-    empresa_admin: [
-      all.dashboard, all.empresa, all.usuarios, all.comissoes, all.saques,
-      all.equipesGrupo, all.pagamentos, all.configuracoes,
-    ],
-    gerente: [
-      all.dashboard, all.usuarios, all.comissoes, all.saques,
-      all.equipesGrupo, all.pagamentos, all.configuracoes,
-    ],
-    lider: [
-      all.dashboard, all.equipe, all.comissoes, all.saques,
-      all.equipesGrupo, all.configuracoes,
-    ],
-    vendedor: [
-      all.dashboard, all.comissoes, all.saques, all.configuracoes,
-    ],
+    admin: simplifiedItems,
+    empresa_admin: simplifiedItems,
+    gerente: simplifiedItems,
+    gerente_comercial: [all.propostas, all.corbans, all.comissoes, all.pagamentos],
+    lider: simplifiedItems,
+    vendedor: simplifiedItems,
+    colaborador: simplifiedItems,
   };
 
   return byRole[role] || byRole.vendedor;

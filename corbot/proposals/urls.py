@@ -1,15 +1,18 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
-    ReadFileView, LayoutView, LayoutFormFieldsView, ProposalFieldsView,
+    ReadFileView, LayoutView, LayoutBulkDeleteView, LayoutFormFieldsView, ProposalFieldsView,
     AgreementNamesView, TableNamesView, UserNamesView, ProposalPreviewView,
     ProposalBatchView, ProposalsByBatchView, ProposalListView, StatusPaymentView
 )
+from .export import ProposalExportView
 
 urlpatterns = [
     path('proposals/', ProposalListView.as_view(), name='proposals'),
+    path('proposals/export/', ProposalExportView.as_view(), name='proposals-export'),
     path('proposals/preview-rows/', ReadFileView.as_view(), name='preview-rows'),
     path('proposals/layouts/', LayoutView.as_view(), name='layouts'),
+    path('proposals/layouts/bulk-delete/', LayoutBulkDeleteView.as_view(), name='layouts-bulk-delete'),
     path('proposals/layouts/<uuid:pk>/', LayoutView.as_view(), name='layouts_detail'),
     path('proposals/layouts/form-fields/', LayoutFormFieldsView.as_view(), name='layouts-form-fields'),
     path('proposals/fields/', ProposalFieldsView.as_view(), name='proposal-fields'),

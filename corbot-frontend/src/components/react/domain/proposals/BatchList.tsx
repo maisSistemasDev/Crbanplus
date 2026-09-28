@@ -3,17 +3,17 @@ import { api } from '../../../../lib/api/client';
 import { ENDPOINTS } from '../../../../lib/api/endpoints';
 import { DataTable } from '../../ui/DataTable';
 import { Button } from '../../ui/Button';
+import { PageHeader } from '../../ui/PageHeader';
 import { Badge } from '../../ui/Badge';
 import { formatDate } from '../../../../lib/utils/format';
 import type { ProposalBatch, PaginatedResponse } from '../../../../lib/api/types';
 import type { Column } from '../../ui/DataTable';
-import { Upload, Search, Play } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { Upload, Search } from 'lucide-react';
 
 const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'success' | 'warning' | 'error' | 'info' }> = {
   pending: { label: 'Pendente', variant: 'warning' },
   processing: { label: 'Processando', variant: 'info' },
-  completed: { label: 'Concluido', variant: 'success' },
+  completed: { label: 'Concluído', variant: 'success' },
   failed: { label: 'Falhou', variant: 'error' },
   partial: { label: 'Parcial', variant: 'warning' },
 };
@@ -66,7 +66,6 @@ export function BatchList() {
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [generatingBatchId, setGeneratingBatchId] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -92,73 +91,19 @@ export function BatchList() {
     fetchData();
   }, [fetchData]);
 
-  async function handleGenerateCommissions(batchId: string) {
-    setGeneratingBatchId(batchId);
-    try {
-      await api.post(ENDPOINTS.GENERATE_COMMISSIONS, { batch_id: batchId });
-      toast.success('Comissoes geradas com sucesso!');
-      await fetchData();
-    } catch {
-      toast.error('Erro ao gerar comissoes');
-    } finally {
-      setGeneratingBatchId(null);
-    }
-  }
-
-  const tableColumns: Column<Record<string, unknown>>[] = [
-    ...columns,
-    {
-      key: 'actions',
-      header: 'Acoes',
-      render: (item) => {
-        const batchId = item.id as string;
-        const batchStatus = String(item.status || '');
-        const pendingCount = Number(item.commissions_to_generate || 0);
-        const isReadyForGeneration = batchStatus === 'completed' || batchStatus === 'partial';
-
-        if (!isReadyForGeneration) {
-          if (batchStatus === 'processing') {
-            return <span className="text-xs text-blue-600">Processando lote...</span>;
-          }
-          if (batchStatus === 'pending') {
-            return <span className="text-xs text-amber-600">Aguardando processamento</span>;
-          }
-          return <span className="text-xs text-gray-400">Indisponivel</span>;
-        }
-
-        if (pendingCount <= 0) {
-          return <span className="text-xs text-gray-400">Sem pendencias</span>;
-        }
-
-        return (
-          <Button
-            size="sm"
-            variant="secondary"
-            loading={generatingBatchId === batchId}
-            onClick={(e) => {
-              e.stopPropagation();
-              void handleGenerateCommissions(batchId);
-            }}
-          >
-            <Play size={14} />
-            Gerar comissoes ({pendingCount})
-          </Button>
-        );
-      },
-    },
-  ];
-
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Lotes de Propostas</h1>
-        <a href="/proposals/batches/upload">
-          <Button>
-            <Upload size={16} />
-            Enviar Lote
-          </Button>
-        </a>
-      </div>
+      <PageHeader
+        title="Lotes de propostas"
+        actions={
+          <a href="/proposals/batches/upload">
+            <Button size="sm">
+              <Upload size={16} />
+              Enviar lote
+            </Button>
+          </a>
+        }
+      />
 
       <div className="mb-4">
         <div className="relative max-w-sm">
@@ -177,7 +122,7 @@ export function BatchList() {
       </div>
 
       <DataTable
-        columns={tableColumns}
+        columns={columns}
         data={data}
         loading={loading}
         totalItems={totalItems}

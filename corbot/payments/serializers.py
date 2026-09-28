@@ -4,12 +4,13 @@ Serializers para os modelos de pagamentos e comissionamentos.
 from rest_framework import serializers
 from core.serializers import UserListSerializer
 from core.models import User, Company
-from .models import CommissionGroup, Payment, Commission, CommissionGroupByCompany, CommissionRules, CommissionRulesByUser, PaymentManual, Withdraw
+from .models import CommissionGroup, Payment, Commission, CommissionGroupByCompany, CommissionRules, CommissionRulesByUser, PaymentManual, Withdraw, UserDebit, CommissionDebitDiscount, ProposalClaim
 from bank.models import Bank, Table
 from core.serializers import CompanySerializer
 from proposals.serializers import ProposalSerializer
 import csv
 from datetime import datetime
+from decimal import Decimal
 
 class CommissionRulesSerializer(serializers.ModelSerializer):
     """
@@ -17,7 +18,7 @@ class CommissionRulesSerializer(serializers.ModelSerializer):
     """
     class Meta:
         model = CommissionRules
-        fields = ['id', 'bank', 'table', 'commission_range', 'commission_rate']
+        fields = ['id', 'bank', 'table', 'commission_range', 'commission_rate', 'fixed_value']
 
 class CommissionRulesByUserSerializer(serializers.ModelSerializer):
     """
@@ -33,17 +34,22 @@ class CommissionGroupSerializer(serializers.ModelSerializer):
     """
     commission_rules = CommissionRulesByUserSerializer(many=True, read_only=True)
     promotora_rules = CommissionRulesSerializer(many=True, read_only=True)
+    company_name = serializers.SerializerMethodField()
+
     class Meta:
         model = CommissionGroup
         fields = [
-            'id', 'name', 'description', 'company', 'is_active',
+            'id', 'name', 'description', 'company', 'company_name', 'is_active',
             'created_at', 'updated_at', 'sellers', 'leaders', 'color',
-            'commission_rules', 'promotora_rules', 'is_active', 'by_leader', 'leader'
+            'commission_rules', 'promotora_rules', 'is_active', 'by_leader', 'leader', 'created_by'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'company_name', 'created_by']
         extra_kwargs = {
             'company': {'required': False, 'allow_null': True},
         }
+
+    def get_company_name(self, obj):
+        return obj.company.name if obj.company_id else None
     
     def sellers_options(self):  
         """
@@ -174,13 +180,24 @@ class CommissionSerializer(serializers.ModelSerializer):
     Serializer para o modelo Commission.
     """
     user_details = UserListSerializer(source='user', read_only=True)
+    proposal_details = ProposalSerializer(source='proposal', read_only=True)
     role_display = serializers.SerializerMethodField()
-    
+    debit_discounts = serializers.SerializerMethodField()
+    company_name = serializers.SerializerMethodField()
+    debit_value = serializers.SerializerMethodField()
+    net_value = serializers.SerializerMethodField()
+    total_value = serializers.SerializerMethodField()
+    is_zeroed = serializers.SerializerMethodField()
+    recipient = serializers.SerializerMethodField()
+    row = serializers.SerializerMethodField()
+
     class Meta:
         model = Commission
         fields = [
-            'id', 'proposal', 'user', 'user_details', 'company', 'role',
-            'role_display', 'percentage', 'value', 'payment',
+            'id', 'proposal', 'user', 'user_details', 'company', 'company_name', 'role',
+            'role_display', 'percentage', 'value', 'gross_value', 'debit_discount', 'debit_discounts',
+            'debit_value', 'net_value', 'total_value', 'is_zeroed', 'recipient', 'row',
+            'payment', 'proposal_details',
             'commission_config', 'created_at', 'updated_at', 'released', 
             'released_at', 'released_by', 'paid_at', 'paid_by', 'release_status'
         ]
@@ -188,6 +205,72 @@ class CommissionSerializer(serializers.ModelSerializer):
     
     def get_role_display(self, obj):
         return obj.get_role_display()
+
+    def get_company_name(self, obj):
+        return obj.company.name if obj.company_id else None
+
+    def get_debit_discounts(self, obj):
+        return [
+            {
+                'debit_id': item.debit_id,
+                'amount': str(item.amount),
+                'reason': item.debit.reason,
+                'origin': item.debit.origin,
+            }
+            for item in obj.debit_discounts.select_related('debit').all()
+        ]
+
+    def _debit_amount(self, obj) -> Decimal:
+        """Débito já abatido (comissão liberada) ou projetado para a próxima liberação."""
+        applied = Decimal(str(obj.debit_discount or 0))
+        if applied > 0:
+            return applied
+        projection = (self.context or {}).get('debit_projection') or {}
+        entry = projection.get(obj.id)
+        return Decimal(str(entry['debit'])) if entry else Decimal('0')
+
+    def get_debit_value(self, obj):
+        return str(self._debit_amount(obj))
+
+    def get_net_value(self, obj):
+        value = Decimal(str(obj.value or 0))
+        if Decimal(str(obj.debit_discount or 0)) > 0:
+            return str(value)
+        return str(max(Decimal('0'), value - self._debit_amount(obj)))
+
+    def get_total_value(self, obj):
+        applied = Decimal(str(obj.debit_discount or 0))
+        if applied > 0:
+            return str(Decimal(str(obj.gross_value or 0)) or (Decimal(str(obj.value or 0)) + applied))
+        return str(Decimal(str(obj.value or 0)))
+
+    def get_is_zeroed(self, obj):
+        return Decimal(self.get_net_value(obj)) <= 0 and self._debit_amount(obj) > 0
+
+    def get_row(self, obj):
+        """Linha compacta (proposta, cliente, banco, tabela, %) para os modais de detalhe."""
+        from payments.services.commission_query import commission_row
+        projection = (self.context or {}).get('debit_projection') or {}
+        return commission_row(obj, projection)
+
+    def get_recipient(self, obj):
+        """Quem recebe o valor: o corban (comissão de empresa) ou o usuário."""
+        if obj.role == Commission.EMPRESA and obj.company_id:
+            return {
+                'type': 'company',
+                'id': str(obj.company_id),
+                'name': obj.company.name,
+                'document': obj.company.document,
+            }
+        if obj.user_id:
+            return {
+                'type': 'user',
+                'id': obj.user_id,
+                'name': obj.user.get_full_name() or obj.user.username,
+                'document': obj.user.cpf,
+            }
+        return None
+
     
     def form_fields(self):
         """
@@ -294,3 +377,100 @@ class WithdrawSerializer(serializers.ModelSerializer):
     class Meta:
         model = Withdraw
         fields = ['id', 'user', 'amount', 'created_at', 'payment']
+
+
+class UserDebitSerializer(serializers.ModelSerializer):
+    user_details = UserListSerializer(source='user', read_only=True)
+    company_details = CompanySerializer(source='company', read_only=True)
+    created_by_name = serializers.SerializerMethodField()
+    owner_name = serializers.SerializerMethodField()
+    owner_type = serializers.SerializerMethodField()
+
+    class Meta:
+        model = UserDebit
+        fields = [
+            'id', 'user', 'user_details', 'company', 'company_details',
+            'owner_name', 'owner_type', 'amount', 'remaining_amount',
+            'reason', 'origin', 'is_active', 'created_by', 'created_by_name',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = [
+            'id', 'remaining_amount', 'origin', 'created_by', 'created_by_name',
+            'created_at', 'updated_at',
+        ]
+
+    def get_created_by_name(self, obj):
+        if not obj.created_by:
+            return None
+        return obj.created_by.get_full_name() or obj.created_by.username
+
+    def get_owner_name(self, obj):
+        if obj.company_id:
+            return obj.company.name
+        if obj.user_id:
+            return obj.user.get_full_name() or obj.user.username
+        return None
+
+    def get_owner_type(self, obj):
+        return 'company' if obj.company_id else 'user'
+
+    def validate_reason(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError('Motivo é obrigatório.')
+        return value.strip()
+
+    def validate_amount(self, value):
+        if value is None or value <= 0:
+            raise serializers.ValidationError('Valor do débito deve ser maior que zero.')
+        return value
+
+    def validate(self, attrs):
+        user = attrs.get('user', getattr(self.instance, 'user', None))
+        company = attrs.get('company', getattr(self.instance, 'company', None))
+        if bool(user) == bool(company):
+            raise serializers.ValidationError(
+                'Informe o usuário ou o corban dono do débito (apenas um dos dois).'
+            )
+        return attrs
+
+    def create(self, validated_data):
+        amount = validated_data['amount']
+        validated_data['remaining_amount'] = amount
+        return super().create(validated_data)
+
+
+class CommissionDebitDiscountSerializer(serializers.ModelSerializer):
+    reason = serializers.CharField(source='debit.reason', read_only=True)
+
+    class Meta:
+        model = CommissionDebitDiscount
+        fields = ['id', 'commission', 'debit', 'amount', 'reason', 'created_at']
+
+
+class ProposalClaimSerializer(serializers.ModelSerializer):
+    claim_type_display = serializers.CharField(source='get_claim_type_display', read_only=True)
+    charged_company_name = serializers.SerializerMethodField()
+    correct_company_name = serializers.SerializerMethodField()
+    created_by_name = serializers.SerializerMethodField()
+    contract_number = serializers.CharField(source='proposal.contract_number', read_only=True)
+    client_name = serializers.CharField(source='proposal.client_name', read_only=True)
+
+    class Meta:
+        model = ProposalClaim
+        fields = [
+            'id', 'proposal', 'contract_number', 'client_name', 'claim_type', 'claim_type_display',
+            'description', 'amount', 'debit', 'charged_company', 'charged_company_name',
+            'correct_company', 'correct_company_name', 'created_by', 'created_by_name', 'created_at',
+        ]
+        read_only_fields = fields
+
+    def get_charged_company_name(self, obj):
+        return obj.charged_company.name if obj.charged_company_id else None
+
+    def get_correct_company_name(self, obj):
+        return obj.correct_company.name if obj.correct_company_id else None
+
+    def get_created_by_name(self, obj):
+        if not obj.created_by:
+            return None
+        return obj.created_by.get_full_name() or obj.created_by.username

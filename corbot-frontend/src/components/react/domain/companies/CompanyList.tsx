@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { api } from '../../../../lib/api/client';
+import { api, resolveMediaUrl } from '../../../../lib/api/client';
 import { ENDPOINTS } from '../../../../lib/api/endpoints';
 import { DataTable } from '../../ui/DataTable';
 import { Button } from '../../ui/Button';
+import { PageHeader } from '../../ui/PageHeader';
 import { Badge } from '../../ui/Badge';
 import type { Company, PaginatedResponse } from '../../../../lib/api/types';
 import type { Column } from '../../ui/DataTable';
@@ -47,14 +48,18 @@ export function CompanyList() {
       render: (item) => (
         <div className="flex items-center gap-3">
           {item.logo && (
-            <img src={item.logo} alt="" className="h-8 w-8 rounded-full object-cover" />
+            <img src={resolveMediaUrl(item.logo)!} alt="" className="h-8 w-8 rounded-full object-cover" />
           )}
           <span className="font-medium text-gray-900">{item.name}</span>
         </div>
       ),
     },
     { key: 'trading_name', header: 'Nome Fantasia', sortable: true },
-    { key: 'cnpj', header: 'CNPJ' },
+    {
+      key: 'document',
+      header: 'CPF/CNPJ',
+      render: (item) => item.document || (item as Company & { cnpj?: string }).cnpj || '—',
+    },
     { key: 'city', header: 'Cidade' },
     { key: 'state', header: 'UF', className: 'w-16' },
     {
@@ -80,22 +85,24 @@ export function CompanyList() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Corbans</h1>
-        <a href="/companies/create">
-          <Button>
-            <Plus size={16} />
-            Novo Corban
-          </Button>
-        </a>
-      </div>
+      <PageHeader
+        title="Corbans"
+        actions={
+          <a href="/companies/create">
+            <Button size="sm">
+              <Plus size={16} />
+              Novo corban
+            </Button>
+          </a>
+        }
+      />
 
       <div className="mb-4">
         <div className="relative max-w-sm">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
-            placeholder="Buscar por nome ou CNPJ..."
+            placeholder="Buscar por nome, fantasia ou CPF/CNPJ..."
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);

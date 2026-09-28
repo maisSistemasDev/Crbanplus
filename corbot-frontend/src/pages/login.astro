@@ -3,5 +3,7 @@ import AuthLayout from '../layouts/AuthLayout.astro';
 import { LoginForm } from '../components/react/domain/auth/LoginForm';
 ---
 <AuthLayout title="CorbanPlus - Login">
-  <LoginForm client:only="react" />
+  <main class="min-h-screen w-full flex items-center justify-center px-4">
+    <LoginForm client:only="react" />
+  </main>
 </AuthLayout>

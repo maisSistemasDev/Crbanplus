@@ -1,0 +1,10 @@
+---
+import PortalLayout from '../../layouts/PortalLayout.astro';
+import { AppShell } from '../../components/react/layout/AppShell';
+import { Dashboard } from '../../components/react/domain/dashboard/Dashboard';
+---
+<PortalLayout title="Dashboard - Portal Corban">
+  <AppShell client:only="react">
+    <Dashboard client:only="react" />
+  </AppShell>
+</PortalLayout>

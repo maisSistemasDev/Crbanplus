@@ -8,7 +8,7 @@ class BankSerializer(serializers.ModelSerializer):
     """
     class Meta:
         model = Bank
-        fields = ['id', 'name', 'logo', 'website', 'is_active']
+        fields = ['id', 'name', 'logo', 'website', 'is_active', 'access_login_type']
         read_only_fields = ['id']
         
     def form_fields(self):
@@ -19,7 +19,16 @@ class BankSerializer(serializers.ModelSerializer):
             {'name': 'name', 'type': 'text', 'label': 'Nome', 'required': True},
             {'name': 'logo', 'type': 'file', 'label': 'Logo', 'required': False, 'accept': 'image/*'},
             {'name': 'website', 'type': 'url', 'label': 'Website', 'required': False},
-            {'name': 'is_active', 'type': 'checkbox', 'label': 'Ativo', 'default': True}
+            {
+                'name': 'access_login_type', 'type': 'select', 'label': 'Tipo de login',
+                'required': True,
+                'options': [
+                    {'value': 'email', 'label': 'E-mail / outro (vários acessos por usuário)'},
+                    {'value': 'cpf', 'label': 'CPF (um acesso por usuário)'},
+                ],
+                'default': 'email',
+            },
+            {'name': 'is_active', 'type': 'checkbox', 'label': 'Ativo', 'default': True},
         ]
 
 class AgreementSerializer(serializers.ModelSerializer):
@@ -48,8 +57,19 @@ class CommissionRangeSerializer(serializers.ModelSerializer):
     """
     class Meta:
         model = CommissionRange
-        fields = ['id', 'min_value', 'max_value', 'commission_rate']
+        fields = ['id', 'min_value', 'max_value', 'commission_rate', 'fixed_value']
         read_only_fields = ['id']
+
+    def validate(self, attrs):
+        from decimal import Decimal
+        rate = attrs.get('commission_rate')
+        fixed = attrs.get('fixed_value')
+        if rate is not None and Decimal(str(rate)) > 100 and fixed is None:
+            attrs['fixed_value'] = rate
+            attrs['commission_rate'] = 0
+        if attrs.get('commission_rate') in (None, '') and attrs.get('fixed_value') in (None, ''):
+            raise serializers.ValidationError('Informe taxa (%) ou valor fixo (R$).')
+        return attrs
 
 
 class TableSerializer(serializers.ModelSerializer):
@@ -64,7 +84,7 @@ class TableSerializer(serializers.ModelSerializer):
         model = Table
         fields = [
             'id', 'bank', 'bank_name', 'agreement', 'agreement_name',
-            'name_in_bank', 'vigency_date', 'is_active', 'alias',
+            'name_in_bank', 'code_in_bank', 'vigency_date', 'is_active', 'alias',
             'commission_ranges',
             # manter campos legados nullable para não quebrar código existente
             'min_value', 'max_value', 'commission_rate',
@@ -99,7 +119,8 @@ class TableSerializer(serializers.ModelSerializer):
             {'name': 'bank', 'type': 'select', 'label': 'Banco', 'required': True, 'options': self.options_banks()},
             {'name': 'agreement', 'type': 'select', 'label': 'Convênio', 'required': True, 'options': self.options_agreemants()},
             {'name': 'name_in_bank', 'type': 'text', 'label': 'Nome no Banco', 'required': False},
-            {'name': 'vigency_date', 'type': 'date', 'label': 'Data de Vigência', 'required': True},
+            {'name': 'code_in_bank', 'type': 'text', 'label': 'Codigo da Tabela', 'required': False},
+            {'name': 'vigency_date', 'type': 'date', 'label': 'Vigência (início)', 'required': True},
             {'name': 'is_active', 'type': 'checkbox', 'label': 'Ativo', 'default': True},
             {'name': 'commission_ranges', 'type': 'ranges', 'label': 'Faixas de Comissionamento', 'required': True},
         ]

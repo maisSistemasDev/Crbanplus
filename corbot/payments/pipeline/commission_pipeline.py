@@ -17,6 +17,59 @@ from .commission_steps import (
     CreateCompanyCommissionStep
 )
 from datetime import datetime
+from payments.models import Commission
+from proposals.models import Proposal
+
+
+def generate_commissions_for_proposal(proposal: Proposal) -> int:
+    """Gera as comissões de uma proposta. Idempotente: se já existir, não recria."""
+    if Commission.objects.filter(proposal=proposal).exists():
+        return 0
+
+    proposal = (
+        Proposal.objects.select_related(
+            'seller',
+            'seller__company',
+            'seller__leader',
+            'table',
+            'bank_access',
+            'company',
+        ).get(pk=proposal.pk)
+    )
+
+    with transaction.atomic():
+        calculate_step = CalculateCommissionStep(proposal)
+        convert_step = ConvertUUIdsStep(proposal)
+        config_step = CreateCommissionConfigStep(proposal)
+        seller_step = CreateSellerCommissionStep(proposal)
+        leader_step = CreateLeaderCommissionStep(proposal)
+        company_step = CreateCompanyCommissionStep(proposal)
+
+        convert_step.data = calculate_step.run()
+        config_step.data = convert_step.run()
+        seller_step.data = config_step.run()
+        leader_step.data = seller_step.run()
+        company_step.data = leader_step.run()
+        company_data = company_step.run()
+
+        created = 0
+        if 'seller_commission' in company_data:
+            created += 1
+        if 'leader_commission' in company_data:
+            created += 1
+        if 'company_commission' in company_data:
+            created += 1
+
+        if created > 0:
+            proposal.release_date = datetime.now().date()
+            proposal.save(update_fields=['release_date'])
+        else:
+            logger.warning(
+                "Proposta %s processada sem comissão (regras/taxas zeradas ou ausentes)",
+                proposal.id,
+            )
+        return created
+
 
 class GenerateCommissionsPipeline(Pipeline):
     """
@@ -73,47 +126,10 @@ class GenerateCommissionsPipeline(Pipeline):
             for proposal in proposals:
                 try:
                     logger.info(f"Calculando comissão para a proposta {proposal.id}")
-
                     with transaction.atomic():
-                        # Criar steps para esta proposta
-                        calculate_step = CalculateCommissionStep(proposal)
-                        convert_step = ConvertUUIdsStep(proposal)
-                        config_step = CreateCommissionConfigStep(proposal)
-                        seller_step = CreateSellerCommissionStep(proposal)
-                        leader_step = CreateLeaderCommissionStep(proposal)
-                        company_step = CreateCompanyCommissionStep(proposal)
-
-                        # Executar step de cálculo
-                        commission_data = calculate_step.run()
-
-                        # Passar dados para os próximos steps
-                        convert_step.data = commission_data
-                        converted_data = convert_step.run()
-
-                        config_step.data = converted_data
-                        config_data = config_step.run()
-
-                        seller_step.data = config_data
-                        seller_data = seller_step.run()
-
-                        leader_step.data = seller_data
-                        leader_data = leader_step.run()
-
-                        company_step.data = leader_data
-                        company_data = company_step.run()
-                        logger.debug(f"{company_data}")
-                        # Contar comissões criadas
-                        if 'seller_commission' in company_data:
-                            created_commissions += 1
-                        if 'leader_commission' in company_data:
-                            created_commissions += 1
-                        if 'company_commission' in company_data:
-                            created_commissions += 1
-
+                        created_for_proposal = generate_commissions_for_proposal(proposal)
+                        created_commissions += created_for_proposal
                         processed_proposals += 1
-                        proposal.release_date = datetime.now()
-                        proposal.save()
-                    
                 except Exception as e:
                     error_msg = f"Erro ao processar proposta {proposal.id}: {str(e)}"
                     logger.error(f"ERRO: {error_msg}")

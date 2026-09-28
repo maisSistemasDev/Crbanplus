@@ -4,6 +4,7 @@ import { ENDPOINTS } from '../../../../lib/api/endpoints';
 import { extractErrorMessage } from '../../../../lib/api/errors';
 import { DynamicForm } from '../../forms/DynamicForm';
 import { Button } from '../../ui/Button';
+import { InactivationButton } from '../../ui/InactivationButton';
 import type { FormFieldDef, Company } from '../../../../lib/api/types';
 import { PageSpinner } from '../../ui/Spinner';
 import { ArrowLeft } from 'lucide-react';
@@ -33,6 +34,14 @@ export function CompanyForm({ companyId }: CompanyFormProps) {
         // Se não está editando, adicionar campos do usuário admin
         if (!isEdit) {
           const adminUserFields: FormFieldDef[] = [
+            {
+              name: 'admin_cpf',
+              type: 'text',
+              label: 'CPF do Administrador',
+              required: true,
+              mask: '999.999.999-99',
+
+            },
             { 
               name: 'admin_password', 
               type: 'password', 
@@ -143,15 +152,24 @@ export function CompanyForm({ companyId }: CompanyFormProps) {
 
   return (
     <div>
-      <div className="flex items-center gap-3 mb-6">
+      <div className="flex items-center gap-2 mb-4">
         <a href="/companies">
           <Button variant="ghost" size="sm">
             <ArrowLeft size={16} />
           </Button>
         </a>
-        <h1 className="text-2xl font-bold text-gray-900">
-          {isEdit ? 'Editar Corban' : 'Novo Corban'}
+        <h1 className="page-title flex-1">
+          {isEdit ? 'Editar corban' : 'Novo corban'}
         </h1>
+        {isEdit && companyId && (
+          <InactivationButton
+            isActive={Boolean(initialValues.is_active)}
+            activationUrl={ENDPOINTS.COMPANY_ACTIVATION(companyId)}
+            inactivatedAt={initialValues.inactivated_at as string | undefined}
+            inactivationReason={initialValues.inactivation_reason as string | undefined}
+            onDone={() => window.location.reload()}
+          />
+        )}
       </div>
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
         <DynamicForm

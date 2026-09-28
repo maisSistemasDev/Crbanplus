@@ -4,6 +4,7 @@ import { ENDPOINTS } from '../../../../lib/api/endpoints';
 import { extractErrorMessage } from '../../../../lib/api/errors';
 import { DataTable } from '../../ui/DataTable';
 import { Button } from '../../ui/Button';
+import { PageHeader } from '../../ui/PageHeader';
 import { Badge } from '../../ui/Badge';
 import { Modal } from '../../ui/Modal';
 import { formatDate } from '../../../../lib/utils/format';
@@ -26,7 +27,7 @@ export function CommissionGroupList() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ page: String(currentPage) });
+      const params = new URLSearchParams({ page: String(currentPage), scope: 'promotora' });
       if (search) params.set('search', search);
       const res = await api.get<PaginatedResponse<CommissionGroup> | CommissionGroup[]>(`${ENDPOINTS.COMMISSION_GROUPS}?${params}`);
       if (Array.isArray(res)) {
@@ -164,13 +165,16 @@ export function CommissionGroupList() {
   return (
     <div>
       <SuggestionsBanner />
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Equipes de Comissao</h1>
-        <Button onClick={openCreate} data-tour="create-group-btn">
-          <Plus size={16} />
-          Nova Equipe
-        </Button>
-      </div>
+      <PageHeader
+        title="Grupos da Promotora"
+        subtitle="Grupos sem Corban vinculado. Para equipes de um Corban, use Equipes → Por Corban."
+        actions={
+          <Button onClick={openCreate} data-tour="create-group-btn">
+            <Plus size={16} />
+            Nova equipe
+          </Button>
+        }
+      />
 
       <div className="mb-4">
         <div className="relative max-w-sm">
@@ -202,6 +206,7 @@ export function CommissionGroupList() {
 
       <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title="Nova Equipe">
         <CommissionGroupForm
+          forcedType="promotora"
           onSubmit={handleSubmit}
           loading={saving}
           onCancel={() => setModalOpen(false)}

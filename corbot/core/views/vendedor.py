@@ -3,10 +3,11 @@ from django.db.models import Q
 from rest_framework import status, permissions
 from rest_framework.response import Response
 
-from core.models import User, Company, ExtraData
+from core.models import User, Company, ExtraData, validate_pix_binding
 from core.serializers import UserSerializer, UserListSerializer, UserCreateSerializer
 from core.permissions import IsAdminOrGerenteOrLider
 from core.base_views import BaseApiView
+from core.search_utils import apply_user_list_search
 from core.exceptions import format_serializer_errors
 
 class VendedoresListView(BaseApiView):
@@ -47,16 +48,26 @@ class VendedoresListView(BaseApiView):
         else:
             return Response({"detail": "Permissão negada."}, status=status.HTTP_403_FORBIDDEN)
 
-        serializer = UserListSerializer(vendedores, many=True)
+        search = request.query_params.get('search', '').strip()
+        vendedores = apply_user_list_search(vendedores, search)
 
-        # Registra a ação usando o método da classe base
+        vendedores = vendedores.order_by('first_name', 'last_name', 'id')
+
+        from rest_framework.pagination import PageNumberPagination
+        paginator = PageNumberPagination()
+        paginator.page_size = 25
+        paginator.page_size_query_param = 'page_size'
+        paginator.max_page_size = 500
+        page = paginator.paginate_queryset(vendedores, request)
+        serializer = UserListSerializer(page, many=True)
+
         self.log_info(
             request=request,
             action='list_vendedores',
-            message=f'Usuário listou {vendedores.count()} usuários para mapeamento'
+            message='Usuário listou usuários para mapeamento (paginado)',
         )
 
-        return Response(serializer.data)
+        return paginator.get_paginated_response(serializer.data)
     
     
     def post(self, request, format=None):
@@ -67,6 +78,15 @@ class VendedoresListView(BaseApiView):
         serializer = UserCreateSerializer(data=request.data)
 
         if serializer.is_valid():
+            pix_error = validate_pix_binding(
+                pix_type=(extra_data or {}).get('pix_type'),
+                pix_key=(extra_data or {}).get('pix_key'),
+                cpf=serializer.validated_data.get('cpf'),
+                cnpj=serializer.validated_data.get('company').document if serializer.validated_data.get('company') else None,
+            )
+            if pix_error:
+                return Response({'extra_data': {'pix_key': [pix_error]}}, status=status.HTTP_400_BAD_REQUEST)
+
             user = serializer.save()
             if extra_data:
                 ExtraData.objects.create(user=user, **extra_data)

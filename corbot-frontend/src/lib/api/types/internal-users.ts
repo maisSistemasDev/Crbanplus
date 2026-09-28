@@ -10,8 +10,8 @@ export interface InternalUser {
   permission_count: number;
   certificado?: string;
   matricula?: string;
-  created_at: string;
-  updated_at: string;
+  date_joined?: string;
+  last_login?: string | null;
 }
 
 export interface UserPermission {
@@ -64,4 +64,5 @@ export interface InternalUserFormData {
   certificado?: string;
   matricula?: string;
   is_active: boolean;
+  permission_ids?: string[];
 }

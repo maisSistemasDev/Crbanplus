@@ -1,15 +1,16 @@
 import { useState, useEffect } from 'react';
-import { api } from '../../../lib/api/client';
 import { Input } from '../ui/Input';
-import { Select } from '../ui/Select';
+import { SearchSelect } from '../ui/SearchSelect';
 import { Button } from '../ui/Button';
 import { FileUpload } from '../ui/FileUpload';
+import { resolveOptionsUrl } from '../../../lib/api/formFieldOptions';
 import type { FormFieldDef } from '../../../lib/api/types';
 
 interface DynamicFormProps {
   fields: FormFieldDef[];
   initialValues?: Record<string, any>;
   onSubmit: (values: Record<string, any>) => void;
+  onChange?: (name: string, value: any, values: Record<string, any>) => void;
   loading?: boolean;
   submitLabel?: string;
 }
@@ -34,11 +35,11 @@ function DynamicFormField({
     case 'select':
       return (
         <div data-tour={field.name === 'role' ? 'user-form-role' : undefined}>
-          <Select
+          <SearchSelect
             label={field.label}
             required={field.required}
             options={field.options}
-            options_url={field.options_url}
+            options_url={resolveOptionsUrl(field)}
             value={value ?? ''}
             onChange={(e) => onChange(field.name, e.target.value)}
           />
@@ -162,6 +163,7 @@ export function DynamicForm({
   fields,
   initialValues = {},
   onSubmit,
+  onChange,
   loading = false,
   submitLabel = 'Salvar',
 }: DynamicFormProps) {
@@ -177,7 +179,11 @@ export function DynamicForm({
   }, [fields]);
 
   function handleChange(name: string, value: any) {
-    setValues((prev) => ({ ...prev, [name]: value }));
+    setValues((prev) => {
+      const next = { ...prev, [name]: value };
+      onChange?.(name, value, next);
+      return next;
+    });
   }
 
   function handleSubmit(e: React.FormEvent) {

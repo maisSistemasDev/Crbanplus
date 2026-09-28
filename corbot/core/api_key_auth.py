@@ -17,9 +17,9 @@ class APIKeyAuthentication(BaseAuthentication):
             return None
 
         key = auth_header[len(self.keyword) + 1:].strip()
-        return self._authenticate_key(key)
+        return self._authenticate_key(request, key)
 
-    def _authenticate_key(self, key: str):
+    def _authenticate_key(self, request, key: str):
         from .models import APIKey
 
         api_key = APIKey.verify_key(key)
@@ -29,7 +29,6 @@ class APIKeyAuthentication(BaseAuthentication):
         # Atualiza last_used_at sem disparar signals desnecessários
         APIKey.objects.filter(pk=api_key.pk).update(last_used_at=timezone.now())
 
-        # Anexa a instância APIKey ao request para uso nas views
         request.api_key = api_key
         return (api_key.created_by, api_key)
 

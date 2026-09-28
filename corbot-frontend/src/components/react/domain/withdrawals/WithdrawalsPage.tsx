@@ -5,6 +5,7 @@ import { ENDPOINTS } from '../../../../lib/api/endpoints';
 import { $currentUser } from '../../../../lib/stores/auth';
 import { DataTable } from '../../ui/DataTable';
 import { Button } from '../../ui/Button';
+import { PageHeader } from '../../ui/PageHeader';
 import { Badge } from '../../ui/Badge';
 import { formatCurrency, formatDate } from '../../../../lib/utils/format';
 import { WithdrawModal } from './WithdrawModal';
@@ -91,21 +92,22 @@ export function WithdrawalsPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Saques</h1>
-          <p className="text-sm text-gray-600 mt-1">Gerencie seus saques de comissões</p>
-        </div>
-        {balance !== null && balance.available > 0 && (
-          <Button
-            onClick={() => setWithdrawModalOpen(true)}
-            variant="primary"
-            icon={<ArrowDownToLine size={16} />}
-          >
-            Solicitar Saque
-          </Button>
-        )}
-      </div>
+      <PageHeader
+        title="Saques"
+        subtitle="Gerencie seus saques de comissões"
+        actions={
+          balance !== null && balance.available > 0 ? (
+            <Button
+              size="sm"
+              onClick={() => setWithdrawModalOpen(true)}
+              variant="primary"
+              icon={<ArrowDownToLine size={16} />}
+            >
+              Solicitar saque
+            </Button>
+          ) : undefined
+        }
+      />
 
       {balance !== null && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">

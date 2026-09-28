@@ -3,10 +3,10 @@ from .views import (
     BankListCreateView, BankDetailView,
     AgreementListCreateView, AgreementDetailView,
     BankAgreementListCreateView, 
-    TableListCreateView, TableDetailView,
+    TableListCreateView, TableDetailView, TableCatalogView,
     BankFormFieldsView, AgreementFormFieldsView, TableFormFieldsView,
     TableCreateBatchView, TableExportCSVView, TablesByBankView, TableHistoryView,
-    TableBulkDeleteView
+    TableBulkDeleteView, AgreementBulkDeleteView
 )
 
 urlpatterns = [
@@ -21,6 +21,7 @@ urlpatterns = [
     
     # Convênios
     path('agreements/', AgreementListCreateView.as_view(), name='agreement-list-create'),
+    path('agreements/bulk-delete/', AgreementBulkDeleteView.as_view(), name='agreement-bulk-delete'),
     path('agreements/<uuid:pk>/', AgreementDetailView.as_view(), name='agreement-detail'),
     
     # Relações Banco-Convênio
@@ -28,6 +29,7 @@ urlpatterns = [
     
     # Tabelas (rotas específicas primeiro, genéricas depois)
     path('tables/', TableListCreateView.as_view(), name='table-list-create'),
+    path('tables/catalog/', TableCatalogView.as_view(), name='table-catalog'),
     path('tables/bulk-delete/', TableBulkDeleteView.as_view(), name='table-bulk-delete'),
     path('tables/create-batch/', TableCreateBatchView.as_view(), name='table-create-batch'),
     path('tables/download-example/', TableCreateBatchView.as_view(), name='table-download-example'),

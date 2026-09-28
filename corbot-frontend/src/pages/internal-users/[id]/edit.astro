@@ -1,10 +1,7 @@
 ---
-import DashboardLayout from '@/layouts/DashboardLayout.astro';
-import InternalUserForm from '@/components/react/domain/internal-users/InternalUserForm';
-
 const { id } = Astro.params;
+if (id) {
+  return Astro.redirect(`/colaboradores/${id}/edit`);
+}
+return Astro.redirect('/colaboradores');
 ---
-
-<DashboardLayout title="Editar Usuário Interno - CorbanPlus">
-  <InternalUserForm client:load userId={id ? parseInt(id) : undefined} />
-</DashboardLayout>

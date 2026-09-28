@@ -1,0 +1,10 @@
+---
+import PortalLayout from '../../layouts/PortalLayout.astro';
+import { AppShell } from '../../components/react/layout/AppShell';
+import { GroupList } from '../../components/react/domain/commission-groups/GroupList';
+---
+<PortalLayout title="Equipes - Portal Corban">
+  <AppShell client:only="react">
+    <GroupList client:only="react" />
+  </AppShell>
+</PortalLayout>

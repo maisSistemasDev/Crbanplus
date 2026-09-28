@@ -23,6 +23,105 @@ def compute_message_embedding(self, message_pk: int, api_key: str):
         raise self.retry(exc=exc)
 
 
+@shared_task(bind=True, max_retries=2, default_retry_delay=30)
+def process_ai_message(self, conversation_id: int, message_pk: int, file_path: str | None = None):
+    """
+    Executa a chamada ao LLM em background e entrega o resultado via WebSocket.
+
+    Fluxo:
+      1. Reconstrói o histórico da conversa.
+      2. Chama get_ai_reply() (pode levar vários segundos).
+      3. Salva a mensagem do assistente.
+      4. Faz group_send no canal `ai_user_<user_id>` para o consumer entregar ao frontend.
+      5. Agenda embeddings como de costume.
+    """
+    from .models import Conversation, Message
+    from .llm import get_ai_reply
+    from channels.layers import get_channel_layer
+    from asgiref.sync import async_to_sync
+
+    channel_layer = get_channel_layer()
+
+    try:
+        conversation = Conversation.objects.select_related('user').get(pk=conversation_id)
+        user_id = conversation.user_id
+
+        history = list(
+            Message.objects.filter(conversation=conversation)
+            .order_by('created_at')
+            .values('role', 'content', 'created_at')
+        )
+
+        from .context_files import resolve_file_for_llm, detach_conversation_file
+        effective_path, file_context_text = resolve_file_for_llm(conversation_id, file_path)
+
+        reply_text, tour_name, file_task_done = get_ai_reply(
+            history=history,
+            conversation_id=conversation_id,
+            file_path=effective_path,
+            file_context_text=file_context_text,
+        )
+
+        assistant_msg = Message.objects.create(
+            conversation=conversation,
+            role='assistant',
+            content=reply_text,
+        )
+
+        task_complete = False
+        if file_task_done:
+            detach_conversation_file(conversation_id)
+            task_complete = True
+
+        # Envia resposta ao frontend via WebSocket
+        logger.info('process_ai_message: enviando ai_reply para ai_user_%s reply_len=%s', user_id, len(reply_text or ''))
+        async_to_sync(channel_layer.group_send)(
+            f'ai_user_{user_id}',
+            {
+                'type': 'ai_reply',
+                'data': {
+                    'type': 'ai_reply',
+                    'conversation_id': conversation_id,
+                    'reply': reply_text,
+                    'tour_name': tour_name,
+                    'message_id': assistant_msg.pk,
+                    'task_complete': task_complete,
+                },
+            },
+        )
+
+        # Agenda embeddings
+        try:
+            from core.models import SystemSettings
+            settings = SystemSettings.get_solo()
+            api_key = (settings.ai_api_key or '').strip()
+            if api_key and settings.ai_provider == 'openai':
+                compute_message_embedding.delay(message_pk, api_key)
+                compute_message_embedding.delay(assistant_msg.pk, api_key)
+        except Exception:
+            pass
+
+    except Exception as exc:
+        logger.error('process_ai_message falhou (conv=%s): %s', conversation_id, exc)
+        # Notifica o frontend do erro para não ficar carregando indefinidamente
+        try:
+            conversation = Conversation.objects.select_related('user').get(pk=conversation_id)
+            async_to_sync(channel_layer.group_send)(
+                f'ai_user_{conversation.user_id}',
+                {
+                    'type': 'ai_error',
+                    'data': {
+                        'type': 'ai_error',
+                        'conversation_id': conversation_id,
+                        'error': 'Não foi possível processar sua mensagem. Tente novamente.',
+                    },
+                },
+            )
+        except Exception:
+            pass
+        raise self.retry(exc=exc)
+
+
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def generate_suggestions_for_table(self, table_id: str, history_id: str):
     """
@@ -187,3 +286,278 @@ def _notify_group_owner(group, table, suggestion):
             ),
             url='/commission-groups',
         )
+
+
+# ─── Indexação e processamento de arquivos grandes ───────────────────────────
+
+def _ws_send(user_id: int, event_type: str, payload: dict):
+    """Atalho para group_send síncrono via channel layer."""
+    from channels.layers import get_channel_layer
+    from asgiref.sync import async_to_sync
+
+    channel_layer = get_channel_layer()
+    async_to_sync(channel_layer.group_send)(
+        f'ai_user_{user_id}',
+        {'type': event_type, 'data': payload},
+    )
+
+
+@shared_task(bind=True, max_retries=2, default_retry_delay=30)
+def index_file_for_tables(self, message_pk: int, conversation_id: int, user_id: int):
+    """
+    Fase 1 do pipeline de arquivo grande:
+      1. Cria o FileIndex (feito aqui, não na view, para não engolir erros de migration).
+      2. Chama LLM UMA VEZ com header + amostra → descobre mapeamento de colunas.
+      3. Cria os FileChunk records.
+      4. Atualiza FileIndex com total_rows, total_chunks, column_mapping, status=processing.
+      5. Envia WebSocket imediato informando o progresso.
+      6. Dispara process_chunk_for_tables para cada chunk.
+    """
+    from .models import FileIndex, FileChunk, Message
+    from .file_chunker import read_tabular_file, iter_chunks
+
+    try:
+        message = Message.objects.get(pk=message_pk)
+    except Message.DoesNotExist:
+        logger.error('index_file_for_tables: Message %s não encontrada', message_pk)
+        return
+
+    file_path = message.file.path if message.file else None
+    if not file_path:
+        logger.error('index_file_for_tables: message %s sem arquivo', message_pk)
+        return
+
+    # Cria o FileIndex aqui — erros de migration ficam no log da task, não engolidos na view
+    try:
+        fi = FileIndex.objects.create(
+            message=message,
+            conversation_id=conversation_id,
+            file_name=message.file_name or 'arquivo',
+            status=FileIndex.INDEXING,
+        )
+    except Exception as exc:
+        logger.error('index_file_for_tables: falha ao criar FileIndex: %s', exc)
+        _ws_send(user_id, 'ai_error', {
+            'type': 'ai_error',
+            'conversation_id': conversation_id,
+            'error': 'Erro interno ao indexar o arquivo. Verifique se as migrations foram aplicadas.',
+        })
+        raise self.retry(exc=exc)
+
+    try:
+        header, rows, _ = read_tabular_file(file_path)
+    except Exception as exc:
+        logger.error('index_file_for_tables: erro ao ler arquivo: %s', exc)
+        fi.status = FileIndex.ERROR
+        fi.save(update_fields=['status'])
+        _ws_send(user_id, 'ai_error', {
+            'type': 'ai_error',
+            'conversation_id': conversation_id,
+            'error': f'Não foi possível ler o arquivo: {exc}',
+        })
+        return
+
+    # ── Criar FileChunk records (o LLM interpreta cada chunk individualmente) ─
+    chunks_data = list(iter_chunks(rows, header))
+
+    bulk_chunks = []
+    for chunk_idx, row_start, row_end, content in chunks_data:
+        bulk_chunks.append(FileChunk(
+            file_index=fi,
+            chunk_index=chunk_idx,
+            row_start=row_start,
+            row_end=row_end,
+            content=content,
+            status=FileChunk.PENDING,
+        ))
+    FileChunk.objects.bulk_create(bulk_chunks)
+
+    # ── Atualiza FileIndex ─────────────────────────────────────────────────
+    fi.total_rows = len(rows)
+    fi.total_chunks = len(chunks_data)
+    fi.status = FileIndex.PROCESSING
+    fi.save(update_fields=['total_rows', 'total_chunks', 'status'])
+
+    # ── Notifica o usuário ─────────────────────────────────────────────────
+    _ws_send(user_id, 'ai_reply', {
+        'type': 'ai_reply',
+        'conversation_id': conversation_id,
+        'reply': (
+            f'Arquivo detectado com **{len(rows)} linhas** em **{len(chunks_data)} lotes**. '
+            f'Iniciando criação das tabelas em segundo plano… '
+            f'Acompanhe o progresso aqui.'
+        ),
+        'message_id': None,
+        'tour_name': None,
+    })
+
+    # ── Dispara uma task por chunk ─────────────────────────────────────────
+    chunk_ids = list(
+        FileChunk.objects.filter(file_index=fi).values_list('id', flat=True)
+    )
+    for chunk_id in chunk_ids:
+        process_chunk_for_tables.delay(chunk_id, conversation_id, user_id)
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=15)
+def process_chunk_for_tables(self, chunk_id: int, conversation_id: int, user_id: int):
+    """
+    Fase 2 do pipeline: processa um único chunk via LLM (create_tables_batch).
+
+    1. Carrega o chunk.
+    2. Chama process_chunk_with_llm — o LLM interpreta o formato da planilha
+       e cria as tabelas usando create_tables_batch.
+    3. Salva result_summary, marca DONE.
+    4. Atualiza done_chunks no FileIndex atomicamente.
+    5. Quando todos os chunks estiverem prontos, envia resumo final via WebSocket.
+    """
+    from .models import FileChunk, FileIndex
+    from .file_chunker import parse_chunk_to_table_dicts
+    from .tools import tool_create_tables_batch
+
+    try:
+        chunk = FileChunk.objects.select_related('file_index').get(pk=chunk_id)
+    except FileChunk.DoesNotExist:
+        logger.error('FileChunk %s não encontrado', chunk_id)
+        return
+
+    file_index = chunk.file_index
+
+    chunk.status = FileChunk.PROCESSING
+    chunk.save(update_fields=['status'])
+
+    try:
+        from core.models import SystemSettings
+        settings = SystemSettings.get_solo()
+        api_key = (settings.ai_api_key or '').strip()
+        provider = settings.ai_provider or 'openai'
+        model = getattr(settings, 'ai_model', None) or None
+
+        if api_key:
+            from .llm import process_chunk_with_llm
+            result = process_chunk_with_llm(chunk.content, api_key, provider, model)
+        else:
+            # Fallback sem LLM: parsing Python com mapeamento salvo no FileIndex
+            from .file_chunker import parse_chunk_to_table_dicts
+            from .tools import tool_create_tables_batch
+            mapping = file_index.column_mapping or {}
+            tables = parse_chunk_to_table_dicts(chunk.content, mapping)
+            result = (
+                tool_create_tables_batch(tables=tables)
+                if tables
+                else {'created_count': 0, 'error_count': 0, 'skipped': True}
+            )
+
+        chunk.result_summary = result
+        chunk.status = FileChunk.DONE
+        chunk.save(update_fields=['result_summary', 'status'])
+
+    except Exception as exc:
+        logger.error('process_chunk_for_tables chunk=%s: %s', chunk_id, exc)
+        chunk.status = FileChunk.ERROR
+        chunk.error_detail = str(exc)
+        chunk.save(update_fields=['status', 'error_detail'])
+        raise self.retry(exc=exc)
+
+    # ── Atualiza progresso e verifica conclusão ────────────────────────────
+    all_done = file_index.increment_done()
+
+    # Notifica progresso em tempo real
+    file_index.refresh_from_db(fields=['done_chunks'])
+    _ws_send(user_id, 'ai_progress', {
+        'type': 'ai_progress',
+        'conversation_id': conversation_id,
+        'done': file_index.done_chunks,
+        'total': file_index.total_chunks,
+    })
+
+    if all_done:
+        file_index.status = FileIndex.DONE
+        file_index.save(update_fields=['status'])
+        _send_completion_summary(file_index, user_id, conversation_id)
+
+
+def _send_completion_summary(file_index, user_id: int, conversation_id: int):
+    """Agrega resultados de todos os chunks e envia resumo final via WebSocket."""
+    from .models import FileChunk
+
+    chunks = FileChunk.objects.filter(file_index=file_index)
+    total_created = 0
+    total_errors = 0
+    error_details: list[str] = []
+
+    for c in chunks:
+        if c.result_summary:
+            total_created += c.result_summary.get('created_count', 0)
+            total_errors += c.result_summary.get('error_count', 0)
+            for err in c.result_summary.get('errors', []):
+                if isinstance(err, dict):
+                    error_details.append(err.get('error', str(err)))
+                else:
+                    error_details.append(str(err))
+        elif c.status == FileChunk.ERROR:
+            total_errors += 1
+            error_details.append(c.error_detail or 'Erro desconhecido')
+
+    parts = [
+        f'Processamento do arquivo **{file_index.file_name}** concluído.',
+        f'**{total_created}** tabelas criadas em {file_index.total_chunks} lotes.',
+    ]
+    if total_errors:
+        parts.append(f'**{total_errors}** erros encontrados.')
+        if error_details[:3]:
+            parts.append('Primeiros erros: ' + '; '.join(error_details[:3]))
+
+    # ── Gera CSV de erros ─────────────────────────────────────────────────
+    error_csv_url = None
+    if total_errors:
+        try:
+            import csv, io, os
+            from django.conf import settings
+            from django.utils import timezone
+
+            rows = []
+            for c in chunks:
+                for err in (c.result_summary or {}).get('errors', []):
+                    d = err.get('data', {})
+                    rows.append({
+                        'banco': d.get('bank_id', ''),
+                        'convenio': d.get('agreement_id', ''),
+                        'nome_tabela': d.get('name_in_bank', ''),
+                        'comissao': d.get('commission_rate', ''),
+                        'vigencia': d.get('vigency_date', ''),
+                        'erro': err.get('error', ''),
+                    })
+
+            if rows:
+                ts = timezone.now().strftime('%Y%m%d_%H%M%S')
+                rel_path = os.path.join('imports', f'erros_{ts}.csv')
+                abs_path = os.path.join(settings.MEDIA_ROOT, rel_path)
+                os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+                with open(abs_path, 'w', newline='', encoding='utf-8-sig') as f:
+                    writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+                    writer.writeheader()
+                    writer.writerows(rows)
+                error_csv_url = f"{settings.MEDIA_URL}{rel_path}"
+        except Exception as exc:
+            logger.warning('Falha ao gerar CSV de erros: %s', exc)
+
+    if error_csv_url:
+        parts.append(f'[Baixar log de erros em CSV]({error_csv_url})')
+
+    from .models import Message
+    msg = Message.objects.create(
+        conversation_id=file_index.conversation_id,
+        role=Message.ASSISTANT,
+        content='\n'.join(parts),
+    )
+    _ws_send(user_id, 'ai_reply', {
+        'type': 'ai_reply',
+        'conversation_id': conversation_id,
+        'reply': '\n'.join(parts),
+        'message_id': msg.pk,
+        'tour_name': None,
+        'task_complete': True,
+    })
+    from .context_files import detach_conversation_file
+    detach_conversation_file(conversation_id)

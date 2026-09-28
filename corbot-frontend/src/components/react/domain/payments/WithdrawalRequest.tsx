@@ -3,6 +3,7 @@ import { api } from '../../../../lib/api/client';
 import { ENDPOINTS } from '../../../../lib/api/endpoints';
 import { extractErrorMessage } from '../../../../lib/api/errors';
 import { Button } from '../../ui/Button';
+import { PageHeader } from '../../ui/PageHeader';
 import { DataTable } from '../../ui/DataTable';
 import { Badge } from '../../ui/Badge';
 import { PageSpinner } from '../../ui/Spinner';
@@ -83,13 +84,15 @@ export function WithdrawalRequest() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Saques</h1>
-        <Button onClick={handleWithdraw} loading={submitting}>
-          <Wallet size={16} />
-          Solicitar Saque
-        </Button>
-      </div>
+      <PageHeader
+        title="Saques"
+        actions={
+          <Button size="sm" onClick={handleWithdraw} loading={submitting}>
+            <Wallet size={16} />
+            Solicitar saque
+          </Button>
+        }
+      />
 
       <p className="text-sm text-gray-500 mb-4">
         Ao solicitar um saque, todas as suas comissoes liberadas serao vinculadas ao pagamento.

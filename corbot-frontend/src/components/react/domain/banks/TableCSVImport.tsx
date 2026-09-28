@@ -5,13 +5,11 @@ import { FileUpload } from '../../ui/FileUpload';
 import { Select } from '../../ui/Select';
 import { api, API_URL } from '../../../../lib/api/client';
 import { ENDPOINTS } from '../../../../lib/api/endpoints';
+import { fetchSelectOptions, type SelectOption } from '../../../../lib/api/formFieldOptions';
 import { Download, Upload, AlertCircle, CheckCircle, Clock } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-interface Bank {
-  id: string;
-  name: string;
-}
+const FROM_FILE_VALUE = '__FROM_FILE__';
 
 interface CSVImportResult {
   created_count: number;
@@ -31,12 +29,21 @@ interface TableCSVImportProps {
 
 export function TableCSVImport({ isOpen, onClose, onSuccess }: TableCSVImportProps) {
   const [selectedBankId, setSelectedBankId] = useState('');
+  const [bankOptions, setBankOptions] = useState<SelectOption[]>([]);
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<CSVImportResult | null>(null);
+  const isFromFile = selectedBankId === FROM_FILE_VALUE;
 
   useEffect(() => {
-    if (!isOpen) {
+    if (isOpen) {
+      fetchSelectOptions(ENDPOINTS.BANKS)
+        .then((options) => setBankOptions([
+          { value: FROM_FILE_VALUE, label: 'Do Arquivo (nome do banco na 1ª coluna)' },
+          ...options,
+        ]))
+        .catch(() => setBankOptions([{ value: FROM_FILE_VALUE, label: 'Do Arquivo (nome do banco na 1ª coluna)' }]));
+    } else {
       // Reset ao fechar
       setSelectedBankId('');
       setFile(null);
@@ -48,8 +55,12 @@ export function TableCSVImport({ isOpen, onClose, onSuccess }: TableCSVImportPro
     try {
       const tokens = localStorage.getItem('tokens');
       const accessToken = tokens ? JSON.parse(tokens).access : '';
-      
-      const response = await fetch(`${API_URL}${ENDPOINTS.TABLES_EXPORT_CSV}`, {
+
+      const templateUrl = isFromFile
+        ? `${ENDPOINTS.TABLES_CREATE_BATCH}?multi_bank=1`
+        : ENDPOINTS.TABLES_EXPORT_CSV;
+
+      const response = await fetch(`${API_URL}${templateUrl}`, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
@@ -87,7 +98,9 @@ export function TableCSVImport({ isOpen, onClose, onSuccess }: TableCSVImportPro
     try {
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('bank_id', selectedBankId);
+      if (!isFromFile) {
+        formData.append('bank_id', selectedBankId);
+      }
 
       const response = await api.post<CSVImportResult>(
         ENDPOINTS.TABLES_CREATE_BATCH,
@@ -124,7 +137,14 @@ export function TableCSVImport({ isOpen, onClose, onSuccess }: TableCSVImportPro
             <li>Preencha os dados das tabelas no formato correto</li>
             <li>Selecione o banco e faça upload do arquivo</li>
             <li>Tabelas existentes serão atualizadas automaticamente</li>
+            <li>Para comissão fixa (R$), use mínimo e máximo 0 e preencha <code>valor_fixo</code> (ex: 960). Taxa acima de 100 também é importada como valor fixo</li>
           </ol>
+          {isFromFile && (
+            <p className="text-xs text-blue-800 mt-2">
+              No modo <strong>Do Arquivo</strong>, a 1ª coluna do CSV deve conter o nome do banco de cada linha
+              (ex: <code>banco;nome_no_banco;convenio;...</code>), permitindo importar tabelas de vários bancos de uma vez.
+            </p>
+          )}
         </div>
 
         {/* Botão Download Template */}
@@ -145,7 +165,7 @@ export function TableCSVImport({ isOpen, onClose, onSuccess }: TableCSVImportPro
           <Select
             value={selectedBankId}
             onChange={(e) => setSelectedBankId(e.target.value)}
-            options_url={ENDPOINTS.BANKS}
+            options={bankOptions}
             placeholder="Selecione um banco"
           />
         </div>

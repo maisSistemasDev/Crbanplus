@@ -28,17 +28,22 @@ export function Badge({ children, variant = 'default', className }: BadgeProps) 
   );
 }
 
-export function StatusBadge({ status }: { status: string }) {
+export function StatusBadge({ status, className }: { status: string; className?: string }) {
   const statusMap: Record<string, { label: string; variant: BadgeProps['variant'] }> = {
     pending: { label: 'Pendente', variant: 'warning' },
     processing: { label: 'Processando', variant: 'info' },
-    completed: { label: 'Concluido', variant: 'success' },
+    processed: { label: 'Processada', variant: 'success' },
+    processada: { label: 'Processada', variant: 'success' },
+    completed: { label: 'Concluído', variant: 'success' },
     failed: { label: 'Falhou', variant: 'error' },
     approved: { label: 'Aprovado', variant: 'success' },
     rejected: { label: 'Rejeitado', variant: 'error' },
     paid: { label: 'Pago', variant: 'success' },
+    not_released: { label: 'Pendente', variant: 'warning' },
+    withdraw_available: { label: 'Saque liberado', variant: 'success' },
+    pending_manual_payment: { label: 'Aguardando pagamento', variant: 'warning' },
   };
 
   const config = statusMap[status] || { label: status, variant: 'default' as const };
-  return <Badge variant={config.variant}>{config.label}</Badge>;
+  return <Badge variant={config.variant} className={className}>{config.label}</Badge>;
 }

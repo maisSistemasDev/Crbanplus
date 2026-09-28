@@ -14,13 +14,27 @@ logger = logging.getLogger(__name__)
 
 
 def _find_range(table, value: Decimal):
-    """Retorna a CommissionRange que cobre o valor, ou None se a tabela não tiver faixas.
-    Faixas com min_value=0 e max_value=0 são desconsideradas."""
-    return table.commission_ranges.exclude(
-        min_value=0, max_value=0
-    ).filter(
-        min_value__lte=value, max_value__gte=value
-    ).first()
+    """Retorna a CommissionRange que cobre o valor (0–0 vale para qualquer proposta)."""
+    return table.find_commission_range(value)
+
+
+def _table_commission_parts(table, value: Decimal) -> tuple[Decimal, Decimal]:
+    """(valor em R$, taxa %). Faixa com valor fixo zera a taxa."""
+    kind, val = table.get_commission_for_amount(value)
+    val = Decimal(str(val))
+    if kind == 'fixed':
+        return val, Decimal('0')
+    return val * Decimal(str(value)) / 100, val
+
+
+def _rule_commission_parts(rule, value: Decimal, table_amount: Decimal, table_rate: Decimal) -> tuple[Decimal, Decimal]:
+    """(valor em R$, taxa %). Sem regra usa a tabela. Valor fixo da regra prevalece."""
+    if not rule:
+        return table_amount, table_rate
+    if getattr(rule, 'fixed_value', None) is not None:
+        return Decimal(str(rule.fixed_value)), Decimal('0')
+    rate = Decimal(str(rule.commission_rate or 0))
+    return rate * value / 100, rate
 
 
 def _get_user_rule(commission_group, table, value: Decimal):
@@ -87,8 +101,12 @@ class GetProposalsStep(Step):
         self.batch_id = batch_id
 
     def _get_proposals(self) -> List[Proposal]:
-        """Retorna todas as propostas que não foram liberadas."""
-        queryset = Proposal.objects.filter(release_date__isnull=True)
+        """Propostas sem comissão gerada (alinhado a commissions_to_generate do lote)."""
+        queryset = (
+            Proposal.objects.filter(commissions__isnull=True)
+            .distinct()
+            .select_related('seller', 'table', 'company', 'batch')
+        )
         if self.batch_id:
             queryset = queryset.filter(batch_id=self.batch_id)
         return list(queryset)
@@ -123,8 +141,8 @@ class CalculateCommissionStep(Step):
         if(not user):
             raise Exception("Não há vendedor para a proposta")
 
-        # Taxa base da tabela para o valor da proposta (considera faixas de comissionamento)
-        table_rate: Decimal = table.get_commission_rate_for_amount(value)
+        # Comissão base da tabela (percentual ou valor fixo da faixa)
+        table_amount, table_rate = _table_commission_parts(table, value)
 
         company = user.company
         commission_group_company = CommissionGroupByCompany.objects.filter(companies__id=company.id, is_active=True).first()
@@ -134,8 +152,10 @@ class CalculateCommissionStep(Step):
         elif user.role == User.LIDER:
             commission_group_user = CommissionGroup.objects.filter(leaders__id=user.id, is_active=True).first()
         elif user.role == User.EMPRESA_ADMIN:
-            # Corban (empresa_admin) pode ser membro de um grupo promotora via sellers
             commission_group_user = CommissionGroup.objects.filter(sellers__id=user.id, is_active=True).first()
+
+        bank_access = getattr(self.proposal, 'bank_access', None)
+        is_master_access = bool(bank_access and bank_access.is_master)
 
         response = {
             'commission_seller': 0,
@@ -154,19 +174,32 @@ class CalculateCommissionStep(Step):
         }
         logger.info(f"Calculando comissão para a proposta {self.proposal.id}")
 
+        # Acesso master (Corban): comissão direta — regras da promotora para o corban
+        if is_master_access:
+            logger.info(f"Comissão via acesso master (Corban) — usuário {user.id}")
+            company_rule = _get_company_rule(commission_group_company, table, value) if commission_group_company else None
+            amt, pct = _rule_commission_parts(company_rule, value, table_amount, table_rate)
+            response['commission_seller'] = amt
+            response['percentage_seller'] = pct
+            response['table_config'] = table.get_config()
+            if company_rule:
+                response['commission_group_company_config'] = commission_group_company.get_config()
+            return response
+
         # ──────────────────────────────────────────────────────────────────────
         # Grupo da Promotora (company=None): taxa única → empresa do corban
         # A promotora define quanto paga ao corban; o corban distribui internamente.
+        # Valor fixo, quando preenchido, substitui o cálculo percentual.
         # ──────────────────────────────────────────────────────────────────────
         if commission_group_user and commission_group_user.company is None:
             promotora_rule = _get_promotora_rule(commission_group_user, table, value)
-            rate = promotora_rule.commission_rate if promotora_rule else table_rate
-            response['commission_company'] = rate * value / 100
-            response['percentage_company'] = rate
+            amt, pct = _rule_commission_parts(promotora_rule, value, table_amount, table_rate)
+            response['commission_company'] = amt
+            response['percentage_company'] = pct
             response['table_config'] = table.get_config()
             response['commission_group_user_config'] = commission_group_user.get_config()
             logger.info(
-                f"Grupo promotora: taxa {rate}% → empresa {company.id}"
+                f"Grupo promotora: {'valor fixo' if promotora_rule and promotora_rule.fixed_value is not None else ('taxa ' + str(promotora_rule.commission_rate) + '%' if promotora_rule else 'tabela')} → empresa {company.id}"
             )
             return response
 
@@ -180,127 +213,91 @@ class CalculateCommissionStep(Step):
                 # Se não houver grupo de comissão para o vendedor,
                 # usa o grupo da empresa e paga somente a comissão da empresa
                 company_rule = _get_company_rule(commission_group_company, table, value) if commission_group_company else None
-                if(not company_rule):
-                    logger.debug(f"Não há regra de comissão para a tabela {table.id}")
-                    response['commission_company'] = table_rate * value / 100
-                    response['percentage_company'] = table_rate
-                    logger.debug(f"Comissão da empresa: {response['commission_company']}")
-                    logger.debug(f"Porcentagem da empresa: {response['percentage_company']}")
-                    response['table_config'] = table.get_config()
-                else:
-                    logger.debug(f"Há regra de comissão para a tabela {table.id}")
-                    response['commission_company'] = company_rule.commission_rate * value / 100
-                    response['percentage_company'] = company_rule.commission_rate
+                amt, pct = _rule_commission_parts(company_rule, value, table_amount, table_rate)
+                response['commission_company'] = amt
+                response['percentage_company'] = pct
+                response['table_config'] = table.get_config()
+                if company_rule:
                     response['commission_group_company_config'] = commission_group_company.get_config()
-                    response['table_config'] = table.get_config()
             else:
                 # Se houver grupo de comissão para o vendedor,
                 # usa o grupo de comissão do vendedor e paga a comissão do vendedor e da empresa
                 rule = _get_user_rule(commission_group_user, table, value)
                 if rule:
                     logger.debug(f"Há regra de comissão para a tabela {table.id}")
-                    # Se houver regra para a tabela, paga a comissão para o vendedor e a comissão da empresa
                     company_rule = _get_company_rule(commission_group_company, table, value) if commission_group_company else None
                     response['commission_seller'] = rule.seller_commission_rate * value / 100
                     response['percentage_seller'] = rule.seller_commission_rate
                     response['commission_group_user_config'] = commission_group_user.get_config()
+                    amt, pct = _rule_commission_parts(company_rule, value, table_amount, table_rate)
+                    split = (rule.seller_commission_rate + rule.leader_commission_rate) * value / 100
+                    response['commission_company'] = amt - split
+                    response['percentage_company'] = pct - (rule.seller_commission_rate + rule.leader_commission_rate)
                     response['table_config'] = table.get_config()
-                    if(company_rule):
-                        logger.debug(f"Há regra de comissão para a tabela {table.id}")
-                        response['commission_company'] = (company_rule.commission_rate - (rule.seller_commission_rate + rule.leader_commission_rate)) * value / 100
+                    if company_rule:
                         response['commission_group_company_config'] = commission_group_company.get_config()
-                    else:
-                        logger.debug(f"Não há regra de comissão para a tabela {table.id}")
-                        response['commission_company'] = (table_rate - (rule.seller_commission_rate + rule.leader_commission_rate)) * value / 100
-                        response['commission_group_company_config'] = table.get_config()
                 else:
                     company_rule = _get_company_rule(commission_group_company, table, value) if commission_group_company else None
-                    if(company_rule):
-                        logger.debug(f"Há regra de comissão para a tabela {table.id}")
-                        response['commission_company'] = company_rule.commission_rate * value / 100
-                        response['percentage_company'] = company_rule.commission_rate
-                        response['table_config'] = table.get_config()
+                    amt, pct = _rule_commission_parts(company_rule, value, table_amount, table_rate)
+                    response['commission_company'] = amt
+                    response['percentage_company'] = pct
+                    response['table_config'] = table.get_config()
+                    if company_rule:
                         response['commission_group_company_config'] = commission_group_company.get_config()
-                    else:
-                        logger.debug(f"Não há regra de comissão para a tabela {table.id}")
-                        response['commission_company'] = table_rate * value / 100
-                        response['percentage_company'] = table_rate
-                        response['table_config'] = table.get_config()
-                # Se houver líder, paga a comissão do líder
                 leader = user.leader
                 if leader:
                     logger.debug(f"Há líder para a proposta {self.proposal.id}")
-                    # Se não houver regra para a tabela, paga a comissão da empresa
-                    if(not rule):
-                        logger.debug(f"Não há regra de comissão para a tabela {table.id}")
+                    if not rule:
                         company_rule = _get_company_rule(commission_group_company, table, value) if commission_group_company else None
-                        if(company_rule):
-                            response['commission_company'] = company_rule.commission_rate * value / 100
-                            response['percentage_company'] = company_rule.commission_rate
-                            response['table_config'] = table.get_config()
+                        amt, pct = _rule_commission_parts(company_rule, value, table_amount, table_rate)
+                        response['commission_company'] = amt
+                        response['percentage_company'] = pct
+                        response['table_config'] = table.get_config()
+                        if company_rule:
                             response['commission_group_company_config'] = commission_group_company.get_config()
-                        else:
-                            logger.debug(f"Não há regra de comissão para a tabela {table.id}")
-                            response['commission_company'] = table_rate * value / 100
-                            response['percentage_company'] = table_rate
-                            response['table_config'] = table.get_config()
                     else:
-                        logger.debug(f"Há regra de comissão para a tabela {table.id}")
-                        # Se houver regra para a tabela, paga a comissão para o líder
                         company_rule = _get_company_rule(commission_group_company, table, value) if commission_group_company else None
                         response['commission_leader'] = rule.leader_commission_rate * value / 100
                         response['percentage_leader'] = rule.leader_commission_rate
-                        if company_rule:
-                            logger.debug(f"Há regra de comissão para a tabela {table.id}")
-                            response['commission_company'] = (company_rule.commission_rate - (rule.leader_commission_rate + rule.seller_commission_rate)) * value / 100
-                            response['percentage_company'] = company_rule.commission_rate - (rule.leader_commission_rate + rule.seller_commission_rate)
-                            response['commission_group_company_config'] = commission_group_company.get_config()
-                        else:
-                            logger.debug(f"Não há regra de comissão para a tabela {table.id}")
-                            response['commission_company'] = (table_rate - (rule.leader_commission_rate + rule.seller_commission_rate)) * value / 100
-                            response['percentage_company'] = table_rate - (rule.leader_commission_rate + rule.seller_commission_rate)
+                        amt, pct = _rule_commission_parts(company_rule, value, table_amount, table_rate)
+                        split = (rule.leader_commission_rate + rule.seller_commission_rate) * value / 100
+                        response['commission_company'] = amt - split
+                        response['percentage_company'] = pct - (rule.leader_commission_rate + rule.seller_commission_rate)
                         response['table_config'] = table.get_config()
                         response['commission_group_user_config'] = commission_group_user.get_config()
+                        if company_rule:
+                            response['commission_group_company_config'] = commission_group_company.get_config()
 
         elif(user.role == User.LIDER):
             logger.info(f"Calculando comissão para o líder {user.id}")
             rule = _get_user_rule(commission_group_user, table, value) if commission_group_user else None
-            if(not rule):
-                logger.debug(f"Não há regra de comissão para a tabela {table.id}")
+            if not rule:
                 company_rule = _get_company_rule(commission_group_company, table, value) if commission_group_company else None
-                if(company_rule):
-                    logger.debug(f"Há regra de comissão para a tabela {table.id}")
-                    response['commission_company'] = company_rule.commission_rate * value / 100
-                    response['percentage_company'] = company_rule.commission_rate
-                    response['table_config'] = table.get_config()
+                amt, pct = _rule_commission_parts(company_rule, value, table_amount, table_rate)
+                response['commission_company'] = amt
+                response['percentage_company'] = pct
+                response['table_config'] = table.get_config()
+                if company_rule:
                     response['commission_group_company_config'] = commission_group_company.get_config()
-                else:
-                    logger.debug(f"Não há regra de comissão para a tabela {table.id}")
-                    response['commission_company'] = table_rate * value / 100
-                    response['percentage_company'] = table_rate
-                    response['table_config'] = table.get_config()
             else:
-                logger.debug(f"Há regra de comissão para a tabela {table.id}")
                 company_rule = _get_company_rule(commission_group_company, table, value) if commission_group_company else None
                 response['commission_leader'] = (rule.leader_commission_rate + rule.seller_commission_rate) * value / 100
                 response['percentage_leader'] = rule.leader_commission_rate + rule.seller_commission_rate
-                if company_rule:
-                    response['commission_company'] = (company_rule.commission_rate - (rule.leader_commission_rate + rule.seller_commission_rate)) * value / 100
-                    response['percentage_company'] = company_rule.commission_rate - (rule.leader_commission_rate + rule.seller_commission_rate)
-                    response['commission_group_company_config'] = commission_group_company.get_config()
-                else:
-                    response['commission_company'] = (table_rate - (rule.leader_commission_rate + rule.seller_commission_rate)) * value / 100
-                    response['percentage_company'] = table_rate - (rule.leader_commission_rate + rule.seller_commission_rate)
+                amt, pct = _rule_commission_parts(company_rule, value, table_amount, table_rate)
+                split = (rule.leader_commission_rate + rule.seller_commission_rate) * value / 100
+                response['commission_company'] = amt - split
+                response['percentage_company'] = pct - (rule.leader_commission_rate + rule.seller_commission_rate)
                 response['table_config'] = table.get_config()
                 response['commission_group_user_config'] = commission_group_user.get_config()
+                if company_rule:
+                    response['commission_group_company_config'] = commission_group_company.get_config()
 
         elif(user.role == User.GERENTE):
             logger.info(f"Calculando comissão para o gerente {user.id}")
             company_rule = _get_company_rule(commission_group_company, table, value) if commission_group_company else None
-            rate = company_rule.commission_rate if company_rule else table_rate
-            # Gerente trabalhando sozinho: recebe a comissão inteira como "seller"
-            response['commission_seller'] = rate * value / 100
-            response['percentage_seller'] = rate
+            amt, pct = _rule_commission_parts(company_rule, value, table_amount, table_rate)
+            response['commission_seller'] = amt
+            response['percentage_seller'] = pct
             response['table_config'] = table.get_config()
             if company_rule:
                 response['commission_group_company_config'] = commission_group_company.get_config()
@@ -308,10 +305,9 @@ class CalculateCommissionStep(Step):
         elif(user.role == User.EMPRESA_ADMIN):
             logger.info(f"Calculando comissão para o empresa_admin {user.id}")
             company_rule = _get_company_rule(commission_group_company, table, value) if commission_group_company else None
-            rate = company_rule.commission_rate if company_rule else table_rate
-            # Empresa admin trabalhando sozinho: recebe a comissão inteira como "seller"
-            response['commission_seller'] = rate * value / 100
-            response['percentage_seller'] = rate
+            amt, pct = _rule_commission_parts(company_rule, value, table_amount, table_rate)
+            response['commission_seller'] = amt
+            response['percentage_seller'] = pct
             response['table_config'] = table.get_config()
             if company_rule:
                 response['commission_group_company_config'] = commission_group_company.get_config()
@@ -396,6 +392,8 @@ class CreateSellerCommissionStep(Step):
         commission_config = self.data['commission_config']
 
         if self.data.get('commission_seller', 0) > 0:
+            gross_value = Decimal(str(self.data['commission_seller']))
+
             # Determinar o role da comissão baseado no role do seller
             seller_role = proposal.seller.role
             if seller_role in (User.GERENTE, User.EMPRESA_ADMIN):
@@ -411,11 +409,13 @@ class CreateSellerCommissionStep(Step):
                 user=proposal.seller,
                 company=proposal.company,
                 role=commission_role,
-                value=self.data['commission_seller'],
+                value=gross_value,
+                gross_value=gross_value,
                 percentage=self.data['percentage_seller'],
                 commission_config=commission_config
             )
             commission.save()
+
             self.data['seller_commission'] = commission
         return self.data
 
@@ -451,16 +451,20 @@ class CreateLeaderCommissionStep(Step):
             else:
                 return self.data
 
+            gross_value = Decimal(str(self.data['commission_leader']))
+
             commission = Commission(
                 proposal=proposal,
                 user=leader_user,
                 company=proposal.company,
                 role=Commission.LIDER,
-                value=self.data['commission_leader'],
+                value=gross_value,
+                gross_value=gross_value,
                 percentage=self.data['percentage_leader'],
                 commission_config=commission_config
             )
             commission.save()
+
             self.data['leader_commission'] = commission
 
         return self.data
@@ -489,12 +493,14 @@ class CreateCompanyCommissionStep(Step):
         commission_config = self.data['commission_config']
 
         if self.data.get('commission_company', 0) > 0:
+            gross_value = Decimal(str(self.data['commission_company']))
             commission = Commission(
                 proposal=proposal,
                 user=proposal.seller,
                 company=proposal.company,
                 role=Commission.EMPRESA,
-                value=self.data['commission_company'],
+                value=gross_value,
+                gross_value=gross_value,
                 percentage=self.data['percentage_company'],
                 commission_config=commission_config
             )

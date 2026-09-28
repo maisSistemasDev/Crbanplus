@@ -21,7 +21,7 @@ class AgreementAdmin(admin.ModelAdmin):
 class CommissionRangeInline(admin.TabularInline):
     model = CommissionRange
     extra = 1
-    fields = ('min_value', 'max_value', 'commission_rate')
+    fields = ('min_value', 'max_value', 'commission_rate', 'fixed_value')
     readonly_fields = ()
 
 

@@ -1,11 +1,10 @@
-import { useState, useEffect, useMemo } from 'react';
-import { useStore } from '@nanostores/react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { api } from '../../../../lib/api/client';
+import { fetchAllPaginated } from '../../../../lib/api/pagination';
 import { ENDPOINTS } from '../../../../lib/api/endpoints';
 import { extractErrorMessage } from '../../../../lib/api/errors';
-import { $currentUser } from '../../../../lib/stores/auth';
 import { Button } from '../../ui/Button';
-import { Input } from '../../ui/Input';
+import { PageHeader } from '../../ui/PageHeader';
 import { Badge } from '../../ui/Badge';
 import { ROLE_LABELS, ROLE_COLORS } from '../../../../lib/utils/roles';
 import type { Role } from '../../../../lib/utils/roles';
@@ -14,13 +13,13 @@ import clsx from 'clsx';
 import { Search, ChevronRight, ChevronLeft, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { CommissionRulesEditor } from './CommissionRulesEditor';
+import { RegistrationLinksPanel } from './RegistrationLinksPanel';
 
 interface TeamBuilderProps {
   groupId: number;
 }
 
 export function TeamBuilder({ groupId }: TeamBuilderProps) {
-  const currentUser = useStore($currentUser);
   const [group, setGroup] = useState<CommissionGroup | null>(null);
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [teamMemberIds, setTeamMemberIds] = useState<number[]>([]);
@@ -29,45 +28,93 @@ export function TeamBuilder({ groupId }: TeamBuilderProps) {
   const [searchAvailable, setSearchAvailable] = useState('');
   const [searchTeam, setSearchTeam] = useState('');
   const [loading, setLoading] = useState(true);
+  const [usersLoading, setUsersLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  // 1) Carrega o grupo primeiro para liberar a tela (regras, links, cabeçalho)
   useEffect(() => {
-    async function load() {
+    let cancelled = false;
+
+    async function loadGroup() {
+      setLoading(true);
+      setUsersLoading(true);
+      setAllUsers([]);
+      setSelectedAvailable(new Set());
+      setSelectedTeam(new Set());
       try {
-        const [groupData, sellers] = await Promise.all([
-          api.get<CommissionGroup>(ENDPOINTS.COMMISSION_GROUP_DETAIL(groupId)),
-          api.get<User[]>(ENDPOINTS.SELLERS),
-        ]);
-
+        const groupData = await api.get<CommissionGroup>(
+          ENDPOINTS.COMMISSION_GROUP_DETAIL(groupId),
+        );
+        if (cancelled) return;
         setGroup(groupData);
-        const memberIds = [
-          ...groupData.sellers,
-          ...groupData.leaders,
-        ];
-        setTeamMemberIds(memberIds);
-
-        // Load all available sellers (and leaders for gerente)
-        const usersList = Array.isArray(sellers) ? sellers : (sellers as any).results || [];
-        setAllUsers(usersList);
+        setTeamMemberIds([...groupData.sellers, ...groupData.leaders]);
       } catch (error) {
-        toast.error(extractErrorMessage(error));
+        if (!cancelled) toast.error(extractErrorMessage(error));
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
-    load();
+
+    loadGroup();
+    return () => {
+      cancelled = true;
+    };
   }, [groupId]);
+
+  // 2) Usuários em paralelo depois — filtra por empresa/role para reduzir volume
+  useEffect(() => {
+    if (!group || group.id !== groupId) return;
+    let cancelled = false;
+    const companyId = group.company;
+    const isPromotora = companyId === null;
+
+    async function loadUsers() {
+      setUsersLoading(true);
+      try {
+        const params: Record<string, string> = {};
+        if (!isPromotora && companyId) {
+          params.company = String(companyId);
+        } else {
+          // Grupo da promotora: só empresa_admin (vínculos por Corban)
+          params.role = 'empresa_admin';
+        }
+
+        const usersList = await fetchAllPaginated<User>(ENDPOINTS.USERS, params);
+        if (cancelled) return;
+        setAllUsers(usersList);
+      } catch (error) {
+        if (!cancelled) toast.error(extractErrorMessage(error));
+      } finally {
+        if (!cancelled) setUsersLoading(false);
+      }
+    }
+
+    loadUsers();
+    return () => {
+      cancelled = true;
+    };
+  }, [groupId, group?.id, group?.company]);
 
   // Filter by group type before splitting available/team
   const eligibleUsers = useMemo(() => {
     if (!group) return allUsers;
     if (group.company === null) {
-      // Grupo por promotora: apenas empresa_admin (um por corban)
+      // Grupo da promotora: vínculos via empresa_admin
       return allUsers.filter((u) => u.role === 'empresa_admin');
-    } else {
-      // Grupo por empresa: apenas usuários da empresa vinculada ao grupo
-      return allUsers.filter((u) => u.company === group.company);
     }
+
+    // Grupo por Corban: apenas hierarquia daquele Corban
+    const companyUsers = allUsers.filter((u) => u.company === group.company);
+    if (group.by_leader && group.leader) {
+      return companyUsers.filter(
+        (u) =>
+          u.id === group.leader ||
+          (u.role === 'vendedor' && u.leader === group.leader),
+      );
+    }
+    return companyUsers.filter((u) =>
+      ['vendedor', 'lider', 'gerente', 'empresa_admin'].includes(u.role),
+    );
   }, [allUsers, group]);
 
   // Split users into available and team members
@@ -120,6 +167,58 @@ export function TeamBuilder({ groupId }: TeamBuilderProps) {
     });
   }
 
+  const allFilteredAvailableSelected =
+    filteredAvailable.length > 0 &&
+    filteredAvailable.every((u) => selectedAvailable.has(u.id));
+  const someFilteredAvailableSelected = filteredAvailable.some((u) =>
+    selectedAvailable.has(u.id),
+  );
+
+  const allFilteredTeamSelected =
+    filteredTeam.length > 0 && filteredTeam.every((u) => selectedTeam.has(u.id));
+  const someFilteredTeamSelected = filteredTeam.some((u) => selectedTeam.has(u.id));
+
+  const selectAllAvailableRef = useRef<HTMLInputElement>(null);
+  const selectAllTeamRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const el = selectAllAvailableRef.current;
+    if (el) {
+      el.indeterminate = someFilteredAvailableSelected && !allFilteredAvailableSelected;
+    }
+  }, [someFilteredAvailableSelected, allFilteredAvailableSelected]);
+
+  useEffect(() => {
+    const el = selectAllTeamRef.current;
+    if (el) {
+      el.indeterminate = someFilteredTeamSelected && !allFilteredTeamSelected;
+    }
+  }, [someFilteredTeamSelected, allFilteredTeamSelected]);
+
+  function toggleSelectAllAvailable() {
+    setSelectedAvailable((prev) => {
+      const next = new Set(prev);
+      if (allFilteredAvailableSelected) {
+        filteredAvailable.forEach((u) => next.delete(u.id));
+      } else {
+        filteredAvailable.forEach((u) => next.add(u.id));
+      }
+      return next;
+    });
+  }
+
+  function toggleSelectAllTeam() {
+    setSelectedTeam((prev) => {
+      const next = new Set(prev);
+      if (allFilteredTeamSelected) {
+        filteredTeam.forEach((u) => next.delete(u.id));
+      } else {
+        filteredTeam.forEach((u) => next.add(u.id));
+      }
+      return next;
+    });
+  }
+
   function handleAddToTeam() {
     if (selectedAvailable.size === 0) return;
     setTeamMemberIds((prev) => [...prev, ...Array.from(selectedAvailable)]);
@@ -156,26 +255,43 @@ export function TeamBuilder({ groupId }: TeamBuilderProps) {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">{group?.name || 'Equipe'}</h1>
-          {group?.description && (
-            <p className="text-sm text-gray-500 mt-1">{group.description}</p>
-          )}
-        </div>
-        <Button onClick={handleSave} loading={saving}>
-          <Check size={16} />
-          Salvar Equipe
-        </Button>
-      </div>
+      <PageHeader
+        title={group?.name || 'Equipe'}
+        subtitle={
+          group?.company
+            ? `${group.company_name || 'Corban'} — apenas usuários da hierarquia deste Corban`
+            : group?.description || undefined
+        }
+        actions={
+          <Button size="sm" onClick={handleSave} loading={saving} disabled={usersLoading}>
+            <Check size={16} />
+            Salvar equipe
+          </Button>
+        }
+      />
+
+      {group?.company !== null && <RegistrationLinksPanel groupId={groupId} />}
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr] gap-4">
         {/* LEFT: Available */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-sm text-gray-700">Disponiveis</h3>
-              <span className="text-xs text-gray-400">{availableUsers.length} pessoas</span>
+            <div className="flex items-center justify-between gap-2">
+              <label className="flex items-center gap-2 cursor-pointer min-w-0">
+                <input
+                  ref={selectAllAvailableRef}
+                  type="checkbox"
+                  checked={allFilteredAvailableSelected}
+                  onChange={toggleSelectAllAvailable}
+                  disabled={usersLoading || filteredAvailable.length === 0}
+                  className="h-4 w-4 rounded border-gray-300 text-[var(--color-primary)] shrink-0"
+                  title="Selecionar todos (visíveis)"
+                />
+                <h3 className="font-semibold text-sm text-gray-700 truncate">Disponiveis</h3>
+              </label>
+              <span className="text-xs text-gray-400 shrink-0">
+                {usersLoading ? '…' : `${availableUsers.length} pessoas`}
+              </span>
             </div>
             <div className="mt-2 relative">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -184,12 +300,18 @@ export function TeamBuilder({ groupId }: TeamBuilderProps) {
                 placeholder="Buscar..."
                 value={searchAvailable}
                 onChange={(e) => setSearchAvailable(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-[var(--color-primary)]"
+                disabled={usersLoading}
+                className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-[var(--color-primary)] disabled:bg-gray-50"
               />
             </div>
           </div>
           <div className="max-h-96 overflow-y-auto divide-y divide-gray-50">
-            {filteredAvailable.length === 0 ? (
+            {usersLoading ? (
+              <div className="flex flex-col items-center justify-center gap-2 px-4 py-10">
+                <div className="animate-spin h-6 w-6 border-2 border-[var(--color-primary)] border-t-transparent rounded-full" />
+                <p className="text-xs text-gray-400">Carregando usuários…</p>
+              </div>
+            ) : filteredAvailable.length === 0 ? (
               <p className="px-4 py-6 text-sm text-gray-400 text-center">Nenhuma pessoa disponivel</p>
             ) : (
               filteredAvailable.map((user) => (
@@ -230,7 +352,7 @@ export function TeamBuilder({ groupId }: TeamBuilderProps) {
             variant="secondary"
             size="sm"
             onClick={handleAddToTeam}
-            disabled={selectedAvailable.size === 0}
+            disabled={usersLoading || selectedAvailable.size === 0}
           >
             <span className="hidden lg:inline">Adicionar</span>
             <ChevronRight size={16} />
@@ -239,7 +361,7 @@ export function TeamBuilder({ groupId }: TeamBuilderProps) {
             variant="secondary"
             size="sm"
             onClick={handleRemoveFromTeam}
-            disabled={selectedTeam.size === 0}
+            disabled={usersLoading || selectedTeam.size === 0}
           >
             <ChevronLeft size={16} />
             <span className="hidden lg:inline">Remover</span>
@@ -249,9 +371,22 @@ export function TeamBuilder({ groupId }: TeamBuilderProps) {
         {/* RIGHT: Team Members */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-sm text-gray-700">Na Equipe</h3>
-              <span className="text-xs text-gray-400">{teamMembers.length} pessoas</span>
+            <div className="flex items-center justify-between gap-2">
+              <label className="flex items-center gap-2 cursor-pointer min-w-0">
+                <input
+                  ref={selectAllTeamRef}
+                  type="checkbox"
+                  checked={allFilteredTeamSelected}
+                  onChange={toggleSelectAllTeam}
+                  disabled={usersLoading || filteredTeam.length === 0}
+                  className="h-4 w-4 rounded border-gray-300 text-red-500 shrink-0"
+                  title="Selecionar todos (visíveis)"
+                />
+                <h3 className="font-semibold text-sm text-gray-700 truncate">Na Equipe</h3>
+              </label>
+              <span className="text-xs text-gray-400 shrink-0">
+                {usersLoading ? '…' : `${teamMembers.length} pessoas`}
+              </span>
             </div>
             <div className="mt-2 relative">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -260,12 +395,18 @@ export function TeamBuilder({ groupId }: TeamBuilderProps) {
                 placeholder="Buscar..."
                 value={searchTeam}
                 onChange={(e) => setSearchTeam(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-[var(--color-primary)]"
+                disabled={usersLoading}
+                className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-[var(--color-primary)] disabled:bg-gray-50"
               />
             </div>
           </div>
           <div className="max-h-96 overflow-y-auto divide-y divide-gray-50">
-            {filteredTeam.length === 0 ? (
+            {usersLoading ? (
+              <div className="flex flex-col items-center justify-center gap-2 px-4 py-10">
+                <div className="animate-spin h-6 w-6 border-2 border-[var(--color-primary)] border-t-transparent rounded-full" />
+                <p className="text-xs text-gray-400">Carregando usuários…</p>
+              </div>
+            ) : filteredTeam.length === 0 ? (
               <p className="px-4 py-6 text-sm text-gray-400 text-center">Nenhum membro na equipe</p>
             ) : (
               filteredTeam.map((user) => (

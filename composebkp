@@ -1,0 +1,195 @@
+# Stack de produção — Portainer + NPM + PgBouncer
+#
+# OBRIGATÓRIO no Portainer (Environment variables da stack):
+#   DB_NAME=corbot
+#   DB_USER=postgres
+#   DB_PASSWORD=<sua senha>
+#   SECRET_KEY, ALLOWED_HOSTS, CSRF_TRUSTED_ORIGINS, CORS_ALLOWED_ORIGINS, ...
+#
+# PgBouncer → Postgres usa IP fixo (172.28.10.2), não hostname "postgres".
+# O DNS embarcado do Docker (127.0.0.11) costuma dar timeout em produção.
+#
+# PRIMEIRO DEPLOY COM IP FIXO: pare a stack, remova a rede corbot_internal antiga
+# (Portainer → Networks → ex. corbanplus_corbot_internal → Remove) e suba de novo.
+# O volume pg_vector_data_prod NÃO é apagado ao remover a rede.
+
+x-postgres-ip: &postgres_ip 172.28.10.2
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: corbot_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pg_vector_data_prod:/var/lib/postgresql/data
+    networks:
+      corbot_internal:
+        ipv4_address: *postgres_ip
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
+    # Descomente só se precisar acessar o Postgres direto pelo host (debug).
+    # Em produção normal o acesso é via pgbouncer dentro da rede Docker.
+    ports:
+       - "5433:5432"
+
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    container_name: corbanplus_pgbouncer
+    restart: unless-stopped
+    environment:
+      # IP literal — não usa DNS do Docker
+      DB_HOST: *postgres_ip
+      DB_PORT: "5432"
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      POOL_MODE: transaction
+      AUTH_TYPE: scram-sha-256
+      ADMIN_USERS: ${DB_USER}
+      MAX_CLIENT_CONN: ${PGBOUNCER_MAX_CLIENT_CONN:-200}
+      DEFAULT_POOL_SIZE: ${PGBOUNCER_DEFAULT_POOL_SIZE:-25}
+      MIN_POOL_SIZE: ${PGBOUNCER_MIN_POOL_SIZE:-5}
+      RESERVE_POOL_SIZE: ${PGBOUNCER_RESERVE_POOL_SIZE:-5}
+      RESERVE_POOL_TIMEOUT: "3"
+      SERVER_RESET_QUERY: DISCARD ALL
+      SERVER_IDLE_TIMEOUT: "600"
+      QUERY_WAIT_TIMEOUT: "120"
+      CLIENT_LOGIN_TIMEOUT: "60"
+      SERVER_CONNECT_TIMEOUT: "15"
+      LOG_CONNECTIONS: "0"
+      LOG_DISCONNECTIONS: "0"
+    networks:
+      - corbot_internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "PGPASSWORD=$$DB_PASSWORD psql -h 127.0.0.1 -p 5432 -U $$DB_USER -d $$DB_NAME -c 'SELECT 1' >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 8
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    container_name: corbanplus_redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    networks:
+      - corbot_internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  web:
+    image: maissistemasdev/corbanplus-backend
+    container_name: corbanplus_web
+    restart: unless-stopped
+    command: >
+      sh -c "python3 manage.py wait_for_db &&
+             python3 manage.py migrate --noinput &&
+             python3 manage.py collectstatic --noinput &&
+             python3 -m daphne -b 0.0.0.0 -p 8000 corbot.asgi:application"
+    ports:
+      - "8002:8000"
+    environment:
+      DEBUG: "False"
+      SECRET_KEY: ${SECRET_KEY}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS}
+      CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
+      DJANGO_READ_DOTENV_LOCAL: "False"
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_HOST: pgbouncer
+      DB_PORT: "5432"
+      DB_PGBOUNCER: "True"
+      DB_CONN_MAX_AGE: "0"
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      TRANSFEERA_API_CLIENT_ID: ${TRANSFEERA_API_CLIENT_ID}
+      TRANSFEERA_API_CLIENT_SECRET: ${TRANSFEERA_API_CLIENT_SECRET}
+      SYSTEM_NAME: ${SYSTEM_NAME}
+      SYSTEM_LOGO_URL: ${SYSTEM_LOGO_URL}
+    volumes:
+      - corbot_media:/app/media
+      - corbot_static:/app/staticfiles
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - corbot_internal
+      - proxy-network
+
+  celery:
+    image: maissistemasdev/corbanplus-backend
+    container_name: corbanplus_celery
+    restart: unless-stopped
+    command: python3 -m celery -A corbot worker --loglevel=info
+    environment:
+      DEBUG: "False"
+      SECRET_KEY: ${SECRET_KEY}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS}
+      DJANGO_READ_DOTENV_LOCAL: "False"
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_HOST: pgbouncer
+      DB_PORT: "5432"
+      DB_PGBOUNCER: "True"
+      DB_CONN_MAX_AGE: "0"
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      TRANSFEERA_API_CLIENT_ID: ${TRANSFEERA_API_CLIENT_ID}
+      TRANSFEERA_API_CLIENT_SECRET: ${TRANSFEERA_API_CLIENT_SECRET}
+    volumes:
+      - corbot_media:/app/media
+
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - corbot_internal
+
+  frontend:
+    image: maissistemasdev/corbanplus-frontend:1.0
+    container_name: corbanplus_frontend
+    restart: unless-stopped
+    depends_on:
+      - web
+    networks:
+      - corbot_internal
+      - proxy-network
+
+volumes:
+  pg_vector_data_prod:
+  redis_data:
+  corbot_media:
+  corbot_static:
+
+networks:
+  corbot_internal:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.10.0/24
+  proxy-network:
+    external: true

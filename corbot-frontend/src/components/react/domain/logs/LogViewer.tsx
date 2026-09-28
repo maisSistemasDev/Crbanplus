@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../../../../lib/api/client';
 import { DataTable } from '../../ui/DataTable';
+import { PageHeader } from '../../ui/PageHeader';
 import { formatDate } from '../../../../lib/utils/format';
 import type { PaginatedResponse } from '../../../../lib/api/types';
 import type { Column } from '../../ui/DataTable';
@@ -84,9 +85,7 @@ export function LogViewer({ title, endpoint }: LogViewerProps) {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
-      </div>
+      <PageHeader title={title} />
 
       <div className="mb-4">
         <div className="relative max-w-sm">

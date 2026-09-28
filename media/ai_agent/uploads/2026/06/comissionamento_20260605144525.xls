@@ -1,0 +1,356 @@
+<table id="commisionTable" class="table table-responsible table-striped table-sm table-hover table-bordered m-0">
+                            <thead>
+                                <tr>
+                                    <th>Operação</th>
+                                    <th class="text-center">Parcelas</th>
+                                    <th class="text-center">Flat</th>
+                                    <th class="text-center">Incide sobre</th>
+                                    <th class="text-center">Bônus</th>
+                                    <th class="text-center">Incide sobre</th>
+                                    <th class="text-center">Diferido</th>
+                                    <th class="text-center">Incide sobre</th>
+                                    <th class="text-center" style="font-weight: bold; font-size: 12px;">Comissão Total</th>
+                                                                        <th class="text-center">Grupo</th>
+                                                                        <th class="text-center">Vigência</th>
+                                    <th class="text-center">Obs</th>
+                                    <th class="text-center">Formalização</th>
+                                </tr>
+                            </thead>
+                            <tbody><tr>
+                    <td>PRATA - FGTS - Vem todo mundo PROPOSTA ACIMA DE 6000 MIL</td>
+                    <td class="text-center text-nowrap">1 até 1000</td>
+                    <td class="text-center">R$&nbsp;960,00</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">R$&nbsp;960,00</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">09/05/2025</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>PRATA - FGTS - GOLACO BMS</td>
+                    <td class="text-center text-nowrap">1 até 150</td>
+                    <td class="text-center">60.00%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">60.00%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">05/06/2026</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>PRATA - FGTS - Procurando Nemo VALOR 25 ATE 30 mil</td>
+                    <td class="text-center text-nowrap">1 até 150</td>
+                    <td class="text-center">52.50%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">52.50%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">17/03/2026</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>PRATA - FGTS - Os magnificos tabela com ajuste e BONUS ( APENAS PELA BMP OU CARTOS 1 ) VALOR DE 25 ATE 10 MIL</td>
+                    <td class="text-center text-nowrap">1 até 150</td>
+                    <td class="text-center">48.50%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">48.50%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">17/03/2026</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>PRATA - FGTS - TABELA CARTOS FLAT VALOR DE 25 ATE 30 MIL</td>
+                    <td class="text-center text-nowrap">1 até 120</td>
+                    <td class="text-center">41.00%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">41.00%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">24/05/2025</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>PRATA - FGTS - A hora da Estrela VALOR DE 25 ATE 250 ( APENAS PELA BMP 1 )</td>
+                    <td class="text-center text-nowrap">1 até 150</td>
+                    <td class="text-center">41.00%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">41.00%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">17/03/2026</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>PRATA - FGTS - A hora da Estrela VALOR DE 25 ATE 250 ( APENAS PELA CARTOS )</td>
+                    <td class="text-center text-nowrap">1 até 1000</td>
+                    <td class="text-center">37.00%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">37.00%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">09/05/2025</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>PRATA - FGTS - Oceano VALOR 25 ATE 20 mil</td>
+                    <td class="text-center text-nowrap">1 até 150</td>
+                    <td class="text-center">37.00%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">37.00%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">17/03/2026</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>PRATA - FGTS - Pense em Mim PROPOSTA DE 0 ATE 250</td>
+                    <td class="text-center text-nowrap">1 até 1000</td>
+                    <td class="text-center">27.00%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">27.00%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">09/05/2025</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>PRATA - FGTS - A hora da Estrela VALOR DE 250 ATE 500 ( APENAS PELA CARTOS )</td>
+                    <td class="text-center text-nowrap">1 até 1000</td>
+                    <td class="text-center">26.00%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">26.00%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">09/05/2025</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>PRATA - FGTS - Vem todo mundo PROPOSTA DE 0 ATE 300</td>
+                    <td class="text-center text-nowrap">1 até 1000</td>
+                    <td class="text-center">25.00%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">25.00%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">09/05/2025</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>PRATA - FGTS - A hora da Estrela VALOR DE 250,01 ATE 500 ( APENAS PELA BMP 1 )</td>
+                    <td class="text-center text-nowrap">1 até 150</td>
+                    <td class="text-center">22.00%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">22.00%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">17/03/2026</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>PRATA - FGTS - A hora da Estrela VALOR 500 ATE 20 MIL ( APENAS PELA CARTOS )</td>
+                    <td class="text-center text-nowrap">1 até 1000</td>
+                    <td class="text-center">20.00%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">20.00%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">09/05/2025</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>PRATA - FGTS - Pense em Mim PROPOSTA DE 250 ATE 400</td>
+                    <td class="text-center text-nowrap">1 até 1000</td>
+                    <td class="text-center">18.00%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">18.00%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">09/05/2025</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>PRATA - FGTS - Vem todo mundo PROPOSTA DE 300 ATE 500</td>
+                    <td class="text-center text-nowrap">1 até 1000</td>
+                    <td class="text-center">17.50%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">17.50%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">09/05/2025</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>PRATA - FGTS - A hora da Estrela VALOR 500,01 ATE 20 MIL ( APENAS PELA BMP 1 )</td>
+                    <td class="text-center text-nowrap">1 até 150</td>
+                    <td class="text-center">16.00%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">16.00%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">17/03/2026</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>PRATA - FGTS - Pense em Mim PROPOSTA DE 400 ATE 700</td>
+                    <td class="text-center text-nowrap">1 até 1000</td>
+                    <td class="text-center">16.00%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">16.00%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">09/05/2025</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>PRATA - FGTS - O Prata King</td>
+                    <td class="text-center text-nowrap">1 até 1000</td>
+                    <td class="text-center">15.05%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">15.05%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">09/05/2025</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>PRATA - FGTS - Vem todo mundo PROPOSTA DE 500 ATE 6000 MIL</td>
+                    <td class="text-center text-nowrap">1 até 1000</td>
+                    <td class="text-center">15.00%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">15.00%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">09/05/2025</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>PRATA - FGTS - Pense em Mim PROPOSTA DE 700 ATE 7000</td>
+                    <td class="text-center text-nowrap">1 até 1000</td>
+                    <td class="text-center">12.00%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">12.00%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">09/05/2025</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>PRATA - FGTS - FASCINACAO VALOR DE 25 ATE 20 MIL</td>
+                    <td class="text-center text-nowrap">1 até 1000</td>
+                    <td class="text-center">11.50%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">11.50%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">09/05/2025</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>PRATA - FGTS - CLT</td>
+                    <td class="text-center text-nowrap">1 até 120</td>
+                    <td class="text-center">5.00%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">5.00%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">30/05/2025</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>PRATA - FGTS - tabela Shake de Morango</td>
+                    <td class="text-center text-nowrap">1 até 1000</td>
+                    <td class="text-center">4.00%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">4.00%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">09/05/2025</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr><tr>
+                    <td>PRATA - FGTS - BONUS</td>
+                    <td class="text-center text-nowrap">1 até 120</td>
+                    <td class="text-center">2.00%</td>
+                    <td class="text-center"><span class="textoErro">Vl. Líquido</span></td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center">-</td>
+                    <td class="text-center"><span class="label label-primary">2.00%</span></td>
+                    <td class="text-center">Normal</td>
+                    <td class="text-center">16/05/2025</td>
+                    <td class="text-center"></td>
+                    <td class="text-center">Digital</td>
+                </tr></tbody>
+                        </table>

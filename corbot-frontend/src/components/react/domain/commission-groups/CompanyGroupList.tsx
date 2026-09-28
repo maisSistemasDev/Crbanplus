@@ -4,55 +4,15 @@ import { ENDPOINTS } from '../../../../lib/api/endpoints';
 import { extractErrorMessage } from '../../../../lib/api/errors';
 import { DataTable } from '../../ui/DataTable';
 import { Button } from '../../ui/Button';
+import { PageHeader } from '../../ui/PageHeader';
 import { Badge } from '../../ui/Badge';
-import { DynamicForm } from '../../forms/DynamicForm';
 import { Modal } from '../../ui/Modal';
 import { formatDate } from '../../../../lib/utils/format';
-import type { CommissionGroupByCompany, PaginatedResponse, FormFieldDef } from '../../../../lib/api/types';
+import type { CommissionGroup, PaginatedResponse } from '../../../../lib/api/types';
 import type { Column } from '../../ui/DataTable';
-import { Plus, Search, Building, Trash2, PowerOff, Power } from 'lucide-react';
+import { Plus, Search, Users, Building, Trash2, PowerOff, Power } from 'lucide-react';
 import toast from 'react-hot-toast';
-
-const columns: Column<Record<string, unknown>>[] = [
-  {
-    key: 'name',
-    header: 'Nome',
-    sortable: true,
-    render: (item) => (
-      <div className="flex items-center gap-2">
-        <div className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color as string }} />
-        <span className="font-medium text-gray-900">{item.name as string}</span>
-      </div>
-    ),
-  },
-  {
-    key: 'companies',
-    header: 'Corbans',
-    render: (item) => {
-      const companies = (item.companies as unknown[]) || [];
-      return (
-        <span className="flex items-center gap-1 text-gray-500">
-          <Building size={14} />
-          {companies.length}
-        </span>
-      );
-    },
-  },
-  {
-    key: 'is_active',
-    header: 'Status',
-    render: (item) => (
-      <Badge variant={item.is_active ? 'success' : 'error'}>
-        {item.is_active ? 'Ativo' : 'Inativo'}
-      </Badge>
-    ),
-  },
-  {
-    key: 'created_at',
-    header: 'Criado em',
-    render: (item) => formatDate(item.created_at as string),
-  },
-];
+import { CommissionGroupForm } from './CommissionGroupForm';
 
 export function CompanyGroupList() {
   const [data, setData] = useState<Record<string, unknown>[]>([]);
@@ -61,28 +21,26 @@ export function CompanyGroupList() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
-  const [formFields, setFormFields] = useState<FormFieldDef[]>([]);
   const [saving, setSaving] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ page: String(currentPage) });
+      const params = new URLSearchParams({ scope: 'corban' });
       if (search) params.set('search', search);
-      const res = await api.get<PaginatedResponse<CommissionGroupByCompany> | CommissionGroupByCompany[]>(`${ENDPOINTS.COMMISSION_GROUPS_BY_COMPANY}?${params}`);
-      if (Array.isArray(res)) {
-        setData(res as unknown as Record<string, unknown>[]);
-        setTotalItems(res.length);
-      } else {
-        setData(res.results as unknown as Record<string, unknown>[]);
-        setTotalItems(res.count);
-      }
+      const res = await api.get<PaginatedResponse<CommissionGroup> | CommissionGroup[]>(
+        `${ENDPOINTS.COMMISSION_GROUPS}?${params}`,
+      );
+      const rows = Array.isArray(res) ? res : res.results;
+      setData(rows as unknown as Record<string, unknown>[]);
+      setTotalItems(Array.isArray(res) ? res.length : res.count);
     } catch {
       setData([]);
+      setTotalItems(0);
     } finally {
       setLoading(false);
     }
-  }, [currentPage, search]);
+  }, [search]);
 
   useEffect(() => {
     fetchData();
@@ -91,7 +49,7 @@ export function CompanyGroupList() {
   async function handleToggleActive(item: Record<string, unknown>, e: React.MouseEvent) {
     e.stopPropagation();
     try {
-      await api.patch(`${ENDPOINTS.COMMISSION_GROUPS_BY_COMPANY}${item.id}/`, { is_active: !item.is_active });
+      await api.patch(`${ENDPOINTS.COMMISSION_GROUPS}${item.id}/`, { is_active: !item.is_active });
       toast.success(item.is_active ? 'Grupo inativado' : 'Grupo ativado');
       fetchData();
     } catch (error) {
@@ -103,7 +61,7 @@ export function CompanyGroupList() {
     e.stopPropagation();
     if (!window.confirm(`Excluir o grupo "${item.name}"? Esta ação não pode ser desfeita.`)) return;
     try {
-      await api.delete(`${ENDPOINTS.COMMISSION_GROUPS_BY_COMPANY}${item.id}/`);
+      await api.delete(`${ENDPOINTS.COMMISSION_GROUPS}${item.id}/`);
       toast.success('Grupo excluído');
       fetchData();
     } catch (error) {
@@ -111,8 +69,56 @@ export function CompanyGroupList() {
     }
   }
 
-  const columnsWithActions: Column<Record<string, unknown>>[] = [
-    ...columns,
+  const columns: Column<Record<string, unknown>>[] = [
+    {
+      key: 'name',
+      header: 'Nome',
+      sortable: true,
+      render: (item) => (
+        <div className="flex items-center gap-2">
+          <div className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color as string }} />
+          <span className="font-medium text-gray-900">{item.name as string}</span>
+        </div>
+      ),
+    },
+    {
+      key: 'company_name',
+      header: 'Corban',
+      render: (item) => (
+        <span className="flex items-center gap-1 text-gray-600">
+          <Building size={14} />
+          {(item.company_name as string) || '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'sellers',
+      header: 'Membros',
+      render: (item) => {
+        const sellers = (item.sellers as number[]) || [];
+        const leaders = (item.leaders as number[]) || [];
+        return (
+          <span className="flex items-center gap-1 text-gray-500">
+            <Users size={14} />
+            {sellers.length + leaders.length}
+          </span>
+        );
+      },
+    },
+    {
+      key: 'is_active',
+      header: 'Status',
+      render: (item) => (
+        <Badge variant={item.is_active ? 'success' : 'error'}>
+          {item.is_active ? 'Ativo' : 'Inativo'}
+        </Badge>
+      ),
+    },
+    {
+      key: 'created_at',
+      header: 'Criado em',
+      render: (item) => formatDate(item.created_at as string),
+    },
     {
       key: 'actions',
       header: '',
@@ -137,21 +143,11 @@ export function CompanyGroupList() {
     },
   ];
 
-  async function openCreate() {
-    try {
-      const fields = await api.get<FormFieldDef[]>(ENDPOINTS.FORM_FIELDS_COMMISSION_GROUPS);
-      setFormFields(Array.isArray(fields) ? fields : []);
-      setModalOpen(true);
-    } catch (error) {
-      toast.error(extractErrorMessage(error));
-    }
-  }
-
   async function handleSubmit(values: Record<string, any>) {
     setSaving(true);
     try {
-      await api.post(ENDPOINTS.COMMISSION_GROUPS_BY_COMPANY, values);
-      toast.success('Grupo criado com sucesso!');
+      await api.post(ENDPOINTS.COMMISSION_GROUPS, values);
+      toast.success('Grupo do Corban criado com sucesso!');
       setModalOpen(false);
       fetchData();
     } catch (error) {
@@ -161,15 +157,21 @@ export function CompanyGroupList() {
     }
   }
 
+  const pageSize = 25;
+  const pagedData = data.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Equipes por Empresa</h1>
-        <Button onClick={openCreate}>
-          <Plus size={16} />
-          Nova Equipe
-        </Button>
-      </div>
+      <PageHeader
+        title="Equipes por Corban"
+        subtitle="Cada grupo fica vinculado a 1 Corban e só aceita usuários da hierarquia dessa empresa."
+        actions={
+          <Button size="sm" onClick={() => setModalOpen(true)}>
+            <Plus size={16} />
+            Nova equipe
+          </Button>
+        }
+      />
 
       <div className="mb-4">
         <div className="relative max-w-sm">
@@ -188,23 +190,25 @@ export function CompanyGroupList() {
       </div>
 
       <DataTable
-        columns={columnsWithActions}
-        data={data}
+        columns={columns}
+        data={pagedData}
         loading={loading}
         totalItems={totalItems}
         currentPage={currentPage}
         onPageChange={setCurrentPage}
-        onRowClick={(item) => (window.location.href = `${window.location.origin}/commission-groups/by-company/${item.id}`)}
+        onRowClick={(item) => {
+          window.location.href = `${window.location.origin}/commission-groups/${item.id}`;
+        }}
         keyExtractor={(item) => String(item.id)}
-        emptyMessage="Nenhuma equipe encontrada"
+        emptyMessage="Nenhuma equipe por Corban encontrada"
       />
 
-      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title="Nova Equipe por Empresa">
-        <DynamicForm
-          fields={formFields}
+      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title="Nova equipe por Corban">
+        <CommissionGroupForm
+          forcedType="corban"
           onSubmit={handleSubmit}
           loading={saving}
-          submitLabel="Criar"
+          onCancel={() => setModalOpen(false)}
         />
       </Modal>
     </div>

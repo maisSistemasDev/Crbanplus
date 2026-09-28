@@ -1,0 +1,10 @@
+---
+import PortalLayout from '../../layouts/PortalLayout.astro';
+import { AppShell } from '../../components/react/layout/AppShell';
+import { CommissionBalance } from '../../components/react/domain/commissions/CommissionBalance';
+---
+<PortalLayout title="Saldo - Portal Corban">
+  <AppShell client:only="react">
+    <CommissionBalance client:only="react" />
+  </AppShell>
+</PortalLayout>

@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { api } from '../../../../lib/api/client';
+import { extractErrorMessage } from '../../../../lib/api/errors';
 import { ENDPOINTS } from '../../../../lib/api/endpoints';
 import { Button } from '../../ui/Button';
+import { PageHeader } from '../../ui/PageHeader';
 import { Select } from '../../ui/Select';
 import { Play, CheckCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -18,11 +20,19 @@ export function GenerateCommissions() {
     }
     setGenerating(true);
     try {
-      await api.post(ENDPOINTS.GENERATE_COMMISSIONS, { batch_id: batchId });
-      toast.success('Comissoes geradas com sucesso!');
+      const res = await api.post<{
+        detail?: string;
+        statistics?: { created_commissions?: number; total_proposals?: number };
+      }>(ENDPOINTS.GENERATE_COMMISSIONS, { batch_id: batchId });
+      const created = res?.statistics?.created_commissions ?? 0;
+      toast.success(
+        created > 0
+          ? `${created} comissão(ões) gerada(s) com sucesso!`
+          : (res?.detail || 'Comissoes geradas com sucesso!'),
+      );
       setDone(true);
-    } catch {
-      toast.error('Erro ao gerar comissoes');
+    } catch (err: unknown) {
+      toast.error(extractErrorMessage(err));
     } finally {
       setGenerating(false);
     }
@@ -30,7 +40,7 @@ export function GenerateCommissions() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Gerar Comissoes</h1>
+      <PageHeader title="Gerar comissões" />
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 max-w-xl">
         {done ? (

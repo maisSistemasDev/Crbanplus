@@ -1,0 +1,11 @@
+---
+import DashboardLayout from '@/layouts/DashboardLayout.astro';
+import { InternalUserEditPage } from '@/components/react/domain/internal-users/InternalUserPages';
+
+const { id } = Astro.params;
+const userId = id ? parseInt(id, 10) : 0;
+---
+
+<DashboardLayout title="Editar colaborador - CorbanPlus">
+  {userId > 0 && <InternalUserEditPage client:only="react" userId={userId} />}
+</DashboardLayout>

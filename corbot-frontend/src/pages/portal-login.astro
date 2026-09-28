@@ -1,0 +1,7 @@
+---
+import AuthLayout from '../layouts/AuthLayout.astro';
+import { PortalLoginForm } from '../components/react/domain/auth/PortalLoginForm';
+---
+<AuthLayout title="Portal Corban - Login">
+  <PortalLoginForm client:only="react" />
+</AuthLayout>

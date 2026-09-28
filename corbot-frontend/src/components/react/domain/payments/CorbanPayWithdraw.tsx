@@ -3,6 +3,7 @@ import { api } from '../../../../lib/api/client';
 import { ENDPOINTS } from '../../../../lib/api/endpoints';
 import { extractErrorMessage } from '../../../../lib/api/errors';
 import { Button } from '../../ui/Button';
+import { PageHeader } from '../../ui/PageHeader';
 import { Badge } from '../../ui/Badge';
 import { formatCurrency, formatDate } from '../../../../lib/utils/format';
 import type { CorbanPayTransaction } from '../../../../lib/api/types';
@@ -82,13 +83,15 @@ export function CorbanPayWithdraw() {
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Saque de Comissões</h1>
-        <Button variant="ghost" size="sm" onClick={fetchData} loading={loading}>
-          <RefreshCw size={16} />
-          Atualizar
-        </Button>
-      </div>
+      <PageHeader
+        title="Saque de comissões"
+        actions={
+          <Button variant="ghost" size="sm" onClick={fetchData} loading={loading}>
+            <RefreshCw size={16} />
+            Atualizar
+          </Button>
+        }
+      />
 
       {/* Saldo disponível */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">

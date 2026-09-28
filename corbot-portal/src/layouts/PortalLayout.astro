@@ -1,0 +1,10 @@
+---
+import BaseLayout from './BaseLayout.astro';
+interface Props {
+  title?: string;
+}
+const { title = 'Portal Corban' } = Astro.props;
+---
+<BaseLayout title={title}>
+  <slot />
+</BaseLayout>

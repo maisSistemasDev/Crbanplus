@@ -6,6 +6,25 @@ export interface TokenResponse {
   refresh: string;
 }
 
+export interface LoginProfile {
+  user_id: number;
+  profile_type: 'vendedor' | 'corban' | 'promotora';
+  role: string;
+  role_label: string;
+  company_name: string | null;
+  label: string;
+}
+
+export type LoginResponse =
+  | TokenResponse
+  | { requires_profile_selection: true; profiles: LoginProfile[] };
+
+export function isProfileSelectionResponse(
+  data: LoginResponse,
+): data is { requires_profile_selection: true; profiles: LoginProfile[] } {
+  return 'requires_profile_selection' in data && data.requires_profile_selection === true;
+}
+
 // ===== Core =====
 export interface User {
   id: number;
@@ -13,7 +32,7 @@ export interface User {
   email: string;
   first_name: string;
   last_name: string;
-  role: 'admin' | 'empresa_admin' | 'gerente' | 'lider' | 'vendedor';
+  role: 'admin' | 'empresa_admin' | 'gerente' | 'gerente_comercial' | 'lider' | 'vendedor' | 'colaborador';
   leader: number | null;
   company: string | null;
   company_name: string | null;
@@ -43,7 +62,9 @@ export interface Company {
   id: string;
   name: string;
   trading_name: string | null;
-  cnpj: string;
+  document: string;
+  /** @deprecated use document */
+  cnpj?: string;
   logo: string | null;
   primary_color: string;
   secondary_color: string;
@@ -57,6 +78,34 @@ export interface Company {
   state: string | null;
   zip_code: string | null;
   is_active: boolean;
+}
+
+export interface PortalUsefulLink {
+  id: number;
+  title: string;
+  url: string;
+  is_active: boolean;
+  display_order: number;
+  created_by: number | null;
+  created_by_name?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PortalWallMessage {
+  id: number;
+  title: string;
+  message: string;
+  company: string | null;
+  company_name?: string;
+  starts_at: string | null;
+  ends_at: string | null;
+  is_active: boolean;
+  display_order: number;
+  created_by: number | null;
+  created_by_name?: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 // ===== Banks =====
@@ -84,6 +133,7 @@ export interface Table {
   agreement: string;
   agreement_name: string;
   name_in_bank: string;
+  code_in_bank: string | null;
   description: string;
   min_value: string;
   max_value: string;
@@ -156,21 +206,34 @@ export interface ProposalBatch {
   layout_name: string;
   name: string;
   commissions_to_generate?: number;
+  error_summary?: { error_message: string; count: number }[];
+  saved_count?: number;
   created_at: string;
   updated_at: string;
 }
 
 export interface Proposal {
   id: string;
-  seller: number;
+  seller: number | null;
+  seller_details?: { first_name: string; last_name: string; display_name?: string };
+  digitador: string | null;
+  bank_access: number | null;
+  bank_access_details?: { id: number; username: string; display_name?: string };
   contract_number: string;
   company: string;
+  company_details?: { name: string };
   bank: string;
+  bank_details?: { name: string };
   agreement: string;
+  agreement_details?: { name: string };
   table: string;
+  table_details?: { name_in_bank: string };
   status: string;
+  payment_status?: string;
+  payment_status_display?: string;
   disbursement_date: string;
   amount: string;
+  commission_value?: string | number | null;
   client_document: string;
   client_name: string;
   original_data: Record<string, unknown>;
@@ -178,6 +241,18 @@ export interface Proposal {
   release_date: string | null;
   hash: string | null;
   commissions?: CommissionSummary;
+  claim_details?: ProposalClaimSummary | null;
+}
+
+export interface ProposalClaimSummary {
+  id: number;
+  claim_type: 'fraude' | 'pago_corban_errado';
+  claim_type_display: string;
+  amount: string;
+  created_at: string;
+  charged_company_name: string | null;
+  correct_company_name: string | null;
+  total: number;
 }
 
 export interface CommissionSummary {
@@ -212,6 +287,7 @@ export interface CommissionGroup {
   name: string;
   description: string | null;
   company: string | null;
+  company_name?: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -236,6 +312,89 @@ export interface CommissionGroupByCompany {
   companies: Company[];
 }
 
+export interface CommissionRecipient {
+  type: 'user' | 'company';
+  id: string | number;
+  name: string;
+  document?: string | null;
+}
+
+/** Linha compacta de comissão usada nos modais de detalhe e no consolidado. */
+export interface CommissionRow {
+  id: number;
+  proposal_id: string | null;
+  contract_number: string | null;
+  client_name: string | null;
+  client_document: string | null;
+  proposal_amount: string;
+  bank_name: string | null;
+  table_name: string | null;
+  matricula: string | null;
+  role: string;
+  role_display: string;
+  percentage: string;
+  total_value: string;
+  debit_value: string;
+  net_value: string;
+  is_zeroed: boolean;
+  release_status: string;
+  created_at: string;
+}
+
+export interface ConsolidatedCommissionGroup {
+  key: string;
+  recipient: CommissionRecipient;
+  /** O consolidado agrupa por recebedor e status; status distintos não se somam. */
+  release_status: string;
+  release_status_display: string;
+  total_value: string;
+  debit_value: string;
+  net_value: string;
+  is_zeroed: boolean;
+  commissions_count: number;
+  commission_ids: number[];
+  items: CommissionRow[];
+  roles: string[];
+  companies: string[];
+}
+
+export interface CommissionTotals {
+  total_value: string;
+  debit_value: string;
+  net_value: string;
+  commissions_count: number;
+  zeroed_count: number;
+}
+
+export interface ConsolidatedCommissionResponse {
+  consolidated: true;
+  results: ConsolidatedCommissionGroup[];
+  totals: CommissionTotals;
+}
+
+export interface DebitDetailEntry {
+  debit_id: number;
+  reason: string;
+  origin: string;
+  owner_name: string;
+  debit_amount: string;
+  remaining_amount: string;
+  created_at: string;
+  projected: boolean;
+  amount: string;
+  commissions: Array<{
+    commission_id: number;
+    amount: string;
+    contract_number: string | null;
+    client_name: string | null;
+  }>;
+}
+
+export interface DebitDetailResponse {
+  results: DebitDetailEntry[];
+  total: string;
+}
+
 export interface Commission {
   id: number;
   proposal: string;
@@ -246,6 +405,19 @@ export interface Commission {
   role_display: string;
   percentage: string;
   value: string;
+  gross_value?: string | null;
+  debit_discount?: string;
+  debit_discounts?: { debit_id: number; amount: string; reason: string; origin?: string }[];
+  /** Valor cheio da comissão, antes de qualquer débito. */
+  total_value?: string;
+  /** Débito já abatido ou projetado para a próxima liberação. */
+  debit_value?: string;
+  /** Valor que será efetivamente pago. */
+  net_value?: string;
+  is_zeroed?: boolean;
+  company_name?: string | null;
+  recipient?: CommissionRecipient | null;
+  row?: CommissionRow;
   payment: number | null;
   commission_config: number | null;
   created_at: string;
@@ -255,6 +427,31 @@ export interface Commission {
   released_by: number | null;
   paid_at: string | null;
   paid_by: number | null;
+  release_status?: 'not_released' | 'withdraw_available' | 'pending_manual_payment' | 'paid';
+  proposal_details?: {
+    contract_number?: string;
+    client_name?: string;
+    disbursement_date?: string;
+  } | null;
+}
+
+export interface UserDebit {
+  id: number;
+  user: number | null;
+  user_details: User | null;
+  company: string | null;
+  company_details: Company | null;
+  owner_name: string | null;
+  owner_type: 'user' | 'company';
+  amount: string;
+  remaining_amount: string;
+  reason: string;
+  origin: 'manual' | 'sinistro';
+  is_active: boolean;
+  created_by: number | null;
+  created_by_name: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 // ===== Payments =====
@@ -297,17 +494,18 @@ export interface CorbanPayTransaction {
 // ===== Bank Access =====
 export interface BankAccess {
   id: string;
-  company: string;
-  company_name: string;
   bank: string;
   bank_name: string;
+  bank_access_login_type?: 'cpf' | 'email';
   username: string;
-  description: string;
+  password?: string;
   is_active: boolean;
+  is_master: boolean;
+  notes: string | null;
+  link: string | null;
+  alias?: string[];
   user: number;
   user_name: string;
-  last_access: string | null;
-  last_access_status: string | null;
   created_by: number | null;
   created_by_name: string | null;
 }

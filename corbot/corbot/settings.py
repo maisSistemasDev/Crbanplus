@@ -38,8 +38,11 @@ INSTALLED_APPS = [
     'proposals',
     'bank_access',
     'payments',
+    'commercial',
     'channels',
     'ai_agent',
+    'proposal_etl',
+    'webhooks',
 ]
 
 MIDDLEWARE = [
@@ -85,16 +88,20 @@ if _db_engine == 'django.db.backends.sqlite3':
         }
     }
 else:
-    DATABASES = {
-        'default': {
-            'ENGINE': _db_engine,
-            'NAME': os.environ.get('DB_NAME', 'corbot'),
-            'USER': os.environ.get('DB_USER', 'postgres'),
-            'PASSWORD': os.environ.get('DB_PASSWORD', 'postgres'),
-            'HOST': os.environ.get('DB_HOST', 'localhost'),
-            'PORT': os.environ.get('DB_PORT', '5432'),
-        }
+    _db_config = {
+        'ENGINE': _db_engine,
+        'NAME': os.environ.get('DB_NAME', 'corbot'),
+        'USER': os.environ.get('DB_USER', 'postgres'),
+        'PASSWORD': os.environ.get('DB_PASSWORD', 'postgres'),
+        'HOST': os.environ.get('DB_HOST', 'localhost'),
+        'PORT': os.environ.get('DB_PORT', '5432'),
+        'CONN_MAX_AGE': int(os.environ.get('DB_CONN_MAX_AGE', '0')),
     }
+    if os.environ.get('DB_PGBOUNCER', '').lower() in ('1', 'true', 'yes'):
+        # PgBouncer em transaction pooling: sem server-side cursors (incompatíveis).
+        _db_config['DISABLE_SERVER_SIDE_CURSORS'] = True
+
+    DATABASES = {'default': _db_config}
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -145,6 +152,9 @@ REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 10,
     'EXCEPTION_HANDLER': 'core.exceptions.custom_exception_handler',
+    'DEFAULT_THROTTLE_RATES': {
+        'public_registration': '60/hour',
+    },
 }
 
 # Configuração do JWT
@@ -173,6 +183,15 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_TASK_ALWAYS_EAGER = os.environ.get('CELERY_TASK_ALWAYS_EAGER', 'False').lower() in ('true', '1', 'yes')
 CELERY_TASK_EAGER_PROPAGATES = CELERY_TASK_ALWAYS_EAGER
+CELERY_BEAT_SCHEDULE = {
+    'proposal-etl-check-schedules': {
+        'task': 'proposal_etl.tasks.check_scheduled_etl_flows',
+        'schedule': 60.0,
+    },
+}
+
+# Limite de itens por execução ETL (paginação + detalhes). Evita travar o worker por horas.
+ETL_MAX_ITEMS_PER_RUN = int(os.environ.get('ETL_MAX_ITEMS_PER_RUN', '2000'))
 
 # Configuração do Channels
 ASGI_APPLICATION = 'corbot.asgi.application'
@@ -218,4 +237,8 @@ CORS_ALLOW_CREDENTIALS = True
 
 # Configurações de Whitelabel
 WHITELABEL_SYSTEM_NAME = os.environ.get('SYSTEM_NAME', 'CorbanPlus')
-WHITELABEL_LOGO_URL = os.environ.get('SYSTEM_LOGO_URL', '') 
+WHITELABEL_LOGO_URL = os.environ.get('SYSTEM_LOGO_URL', '')
+
+# URL pública do frontend (links de cadastro, etc.)
+PUBLIC_APP_BASE_URL = os.environ.get('PUBLIC_APP_BASE_URL', '').rstrip('/')
+PUBLIC_API_BASE_URL = os.environ.get('PUBLIC_API_BASE_URL', '').rstrip('/') 

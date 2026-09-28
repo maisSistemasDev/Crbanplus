@@ -1,42 +1,28 @@
 import re
 from django.contrib.auth.backends import ModelBackend
-from django.contrib.auth import get_user_model
 
-User = get_user_model()
+from core.auth_profiles import find_users_for_login, normalize_login_document
 
 
 class DocumentAuthBackend(ModelBackend):
     """
-    Backend de autenticação customizado que permite login com CPF ou CNPJ.
-    Normaliza o documento (remove pontos, traços) antes de buscar o usuário.
+    Backend de autenticação: CPF/CNPJ + senha.
+    Com múltiplos perfis, retorna o primeiro que confere (admin Django).
+    O fluxo web usa TokenObtainPairView com seleção de perfil.
     """
-    
+
     def authenticate(self, request, username=None, password=None, **kwargs):
         if username is None or password is None:
             return None
-        
-        # Normaliza o documento (remove formatação)
-        username = re.sub(r'\D', '', username)
-        
+
+        username = normalize_login_document(username)
+        users = find_users_for_login(username, password)
+        return users[0] if users else None
+
+    def get_user(self, user_id):
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
         try:
-            # Busca usuário pelo CPF (que é o USERNAME_FIELD)
-            user = User.objects.get(cpf=username)
+            return User.objects.get(pk=user_id)
         except User.DoesNotExist:
-            # Se não encontrou, tenta buscar pelo documento da empresa (para empresa_admin)
-            # Isso permite que empresa_admin de corban PJ faça login com o CNPJ
-            try:
-                from core.models import Company
-                company = Company.objects.get(document=username)
-                # Busca o empresa_admin vinculado a esta empresa
-                user = User.objects.get(
-                    company=company,
-                    role=User.EMPRESA_ADMIN
-                )
-            except (Company.DoesNotExist, User.DoesNotExist, User.MultipleObjectsReturned):
-                return None
-        
-        # Verifica a senha
-        if user.check_password(password):
-            return user
-        
-        return None
+            return None

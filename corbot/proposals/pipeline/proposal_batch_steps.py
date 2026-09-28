@@ -53,7 +53,7 @@ def clean_nan_values(data):
     elif hasattr(data, 'dtype') and 'datetime' in str(data.dtype):
         # Trata objetos numpy datetime
         try:
-            return pd.to_datetime(data).isoformat()
+            return pd.to_datetime(data, dayfirst=True).isoformat()
         except Exception:
             return str(data)
     else:
@@ -187,6 +187,15 @@ class CreateProposalStep(Step):
                 
                 proposal_context['created'] = True
                 proposal_context['proposal_instance'] = validation.proposal
+                try:
+                    from payments.pipeline.commission_pipeline import generate_commissions_for_proposal
+                    generate_commissions_for_proposal(validation.proposal)
+                except Exception as e:
+                    logger.warning(
+                        "Proposta %s gravada sem comissão: %s",
+                        validation.proposal.id,
+                        e,
+                    )
             except Exception as e:
                 proposal_context.update({
                     'created': False,
@@ -214,7 +223,7 @@ class HandleErrorStep(Step):
                 ErroredProposal.objects.create(
                     batch=proposal_context['batch'],
                     original_data=proposal_context['proposal_data'],
-                    error_message=proposal_context.get('error_message', 'Erro desconhecido')
+                    error_message=str(proposal_context.get('error_message') or 'Erro desconhecido')
                 )
                 proposal_context['error_saved'] = True
             except Exception as e:

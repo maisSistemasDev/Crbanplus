@@ -2,14 +2,14 @@ version: '3.8'
 
 services:
   postgres:
-    image: postgres:15-alpine
+    image: pgvector/pgvector:pg15
     container_name: corbot_postgres
     environment:
       POSTGRES_DB: corbot
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: corbot_local
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -23,7 +23,7 @@ services:
     image: redis:7-alpine
     container_name: corbot_redis
     ports:
-      - "6379:6379"
+      - "6380:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -36,6 +36,7 @@ services:
     build:
       context: ./corbot
     container_name: corbot_web
+    stop_grace_period: 65s
     command: >
       sh -c "python3 manage.py wait_for_db &&
              until python3 manage.py migrate --noinput; do
@@ -43,7 +44,7 @@ services:
                python3 manage.py wait_for_db;
              done &&
              python3 manage.py collectstatic --noinput &&
-             python3 -m daphne -b 0.0.0.0 -p 8000 corbot.asgi:application"
+             python3 -m daphne -b 0.0.0.0 -p 8000 --application-close-timeout 60 corbot.asgi:application"
     env_file:
       - ./corbot/.env
     ports:
@@ -79,12 +80,31 @@ services:
       args:
         PUBLIC_API_URL: http://localhost:8000
         PUBLIC_WS_URL: ws://localhost:8000
+        PUBLIC_PORTAL_APP_URL: http://localhost:3001
     container_name: corbot_frontend
     ports:
-      - "80:3000"
+      - "8080:3000"
     environment:
       - PUBLIC_API_URL=http://localhost:8000
       - PUBLIC_WS_URL=ws://localhost:8000
+      - PUBLIC_PORTAL_APP_URL=http://localhost:3001
+      - BACKEND_URL=http://web:8000
+    depends_on:
+      - web
+
+  portal:
+    build:
+      context: ./corbot-portal
+      args:
+        PUBLIC_API_URL: http://localhost:8000
+        PUBLIC_ADMIN_APP_URL: http://localhost:8080
+    container_name: corbot_portal
+    ports:
+      - "3001:3001"
+    environment:
+      - PUBLIC_API_URL=http://localhost:8000
+      - PUBLIC_ADMIN_APP_URL=http://localhost:8080
+      - BACKEND_URL=http://web:8000
     depends_on:
       - web
 

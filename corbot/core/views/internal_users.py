@@ -30,7 +30,7 @@ class InternalUserViewSet(viewsets.ModelViewSet):
         return User.objects.filter(
             Q(role=User.ADMIN) | Q(role=User.COLABORADOR),
             company__isnull=True
-        ).order_by('-created_at')
+        ).order_by('-date_joined')
     
     def create(self, request, *args, **kwargs):
         """Cria um novo usuário interno"""
@@ -157,6 +157,9 @@ class InternalUserViewSet(viewsets.ModelViewSet):
             # Configurações
             {'codename': 'view_settings', 'name': 'Visualizar Configurações', 'category': UserPermission.CATEGORY_SETTINGS},
             {'codename': 'edit_settings', 'name': 'Editar Configurações', 'category': UserPermission.CATEGORY_SETTINGS},
+
+            # Área Comercial
+            {'codename': 'manage_commercial_teams', 'name': 'Gerenciar Equipes Comerciais', 'category': UserPermission.CATEGORY_COMMERCIAL},
         ]
         
         # Agrupa por categoria
@@ -253,6 +256,9 @@ class PermissionTemplateViewSet(viewsets.ModelViewSet):
             {'codename': 'export_reports', 'name': 'Exportar Relatórios', 'category': UserPermission.CATEGORY_REPORTS},
             {'codename': 'view_settings', 'name': 'Visualizar Configurações', 'category': UserPermission.CATEGORY_SETTINGS},
             {'codename': 'edit_settings', 'name': 'Editar Configurações', 'category': UserPermission.CATEGORY_SETTINGS},
+
+            # Área Comercial
+            {'codename': 'manage_commercial_teams', 'name': 'Gerenciar Equipes Comerciais', 'category': UserPermission.CATEGORY_COMMERCIAL},
         ]
         
         return {perm['codename']: perm for perm in permissions}

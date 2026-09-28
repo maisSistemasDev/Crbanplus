@@ -21,7 +21,37 @@ class TimeStampedModel(models.Model):
         abstract = True
 
 
-class Company(TimeStampedModel):
+class InactivationMixin(models.Model):
+    """
+    Fornece auditoria de inativação: data/hora, motivo e responsável.
+    O model concreto precisa ter um campo booleano `is_active`.
+    """
+    inactivated_at = models.DateTimeField(_('inativado em'), null=True, blank=True)
+    inactivation_reason = models.TextField(_('motivo da inativação'), null=True, blank=True)
+    inactivated_by = models.ForeignKey(
+        'core.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='+', verbose_name=_('inativado por'),
+    )
+
+    class Meta:
+        abstract = True
+
+    def deactivate(self, by_user=None, reason=''):
+        self.is_active = False
+        self.inactivated_at = timezone.now()
+        self.inactivation_reason = reason or ''
+        self.inactivated_by = by_user
+        self.save()
+
+    def reactivate(self):
+        self.is_active = True
+        self.inactivated_at = None
+        self.inactivation_reason = None
+        self.inactivated_by = None
+        self.save()
+
+
+class Company(InactivationMixin, TimeStampedModel):
     """
     Modelo para representar as empresas (corbans) que receberão o whitelabel.
     """
@@ -37,7 +67,10 @@ class Company(TimeStampedModel):
     name = models.CharField(_('nome'), max_length=255)
     trading_name = models.CharField(_('nome fantasia'), max_length=255, blank=True, null=True)
     person_type = models.CharField(_('tipo de pessoa'), max_length=2, choices=PERSON_TYPE_CHOICES, default=PERSON_TYPE_PJ)
-    document = models.CharField(_('CPF/CNPJ'), max_length=18, unique=True)
+    document = models.CharField(
+        _('CPF/CNPJ'), max_length=18, unique=True, null=True, blank=True,
+        help_text=_('Opcional na criação. O vínculo do corban (usuário admin) é sempre por CPF; o CNPJ pode ser preenchido depois.'),
+    )
     logo = models.ImageField(_('logo'), upload_to='company_logos/', blank=True, null=True)
     
     # Configurações de personalização
@@ -90,7 +123,10 @@ class Company(TimeStampedModel):
     def save(self, *args, **kwargs):
         """Normaliza o documento antes de salvar."""
         if self.document:
-            self.document = re.sub(r'\D', '', self.document)
+            self.document = re.sub(r'\D', '', self.document) or None
+        else:
+            # Evita colisão de unicidade entre múltiplos documentos em branco ("").
+            self.document = None
         self.full_clean()
         super().save(*args, **kwargs)
 
@@ -99,15 +135,19 @@ class UserManager(BaseUserManager):
     """
     Gerenciador de usuários personalizado para o modelo User.
     """
-    def create_user(self, cpf, password=None, **extra_fields):
+    def create_user(self, cpf, password=None, login_document=None, **extra_fields):
         """
-        Cria e salva um usuário com o CPF e senha fornecidos.
+        Cria e salva um usuário. `cpf` identifica o perfil; `login_document`
+        agrupa perfis da mesma pessoa no login (default: mesmo valor do cpf).
         """
         if not cpf:
             raise ValueError(_('O CPF é obrigatório'))
 
+        from core.auth_profiles import ensure_profile_credentials
+
         cpf = re.sub(r'\D', '', cpf)
         user = self.model(cpf=cpf, **extra_fields)
+        ensure_profile_credentials(user, login_document=login_document or cpf, cpf=cpf)
         user.set_password(password)
         user.save(using=self._db)
         return user
@@ -128,13 +168,15 @@ class UserManager(BaseUserManager):
         return self.create_user(cpf, password, **extra_fields)
 
 
-class User(AbstractUser):
+class User(InactivationMixin, AbstractUser):
     """
-    Modelo de usuário personalizado que usa CPF como identificador único.
+    Modelo de usuário. Cada perfil (vendedor, corban, etc.) é um registro
+    independente; perfis da mesma pessoa compartilham login_document no login.
     """
     # Definição de papéis - Promotora (usuários internos)
     ADMIN = 'admin'
     COLABORADOR = 'colaborador'
+    GERENTE_COMERCIAL = 'gerente_comercial'
     
     # Definição de papéis - Corbans (empresas parceiras)
     EMPRESA_ADMIN = 'empresa_admin'
@@ -146,6 +188,7 @@ class User(AbstractUser):
         # Roles da Promotora
         (ADMIN, _('Administrador da Promotora')),
         (COLABORADOR, _('Colaborador da Promotora')),
+        (GERENTE_COMERCIAL, _('Gerente Comercial')),
         # Roles dos Corbans
         (EMPRESA_ADMIN, _('Administrador do Corban')),
         (GERENTE, _('Gerente')),
@@ -153,9 +196,19 @@ class User(AbstractUser):
         (VENDEDOR, _('Vendedor')),
     )
     
-    username = None
-    email = models.EmailField(_('endereço de email'), unique=True)
-    cpf = models.CharField(_('CPF/CNPJ'), max_length=14, unique=True, help_text=_('CPF ou CNPJ sem formatação'))
+    username = models.CharField(_('username'), max_length=150, unique=True)
+    email = models.EmailField(_('endereço de email'))
+    cpf = models.CharField(
+        _('CPF/CNPJ'),
+        max_length=14,
+        help_text=_('Documento do perfil (CPF do vendedor ou CNPJ do corban PJ)'),
+    )
+    login_document = models.CharField(
+        _('documento de login'),
+        max_length=14,
+        db_index=True,
+        help_text=_('CPF/CNPJ usado para agrupar perfis no login'),
+    )
     role = models.CharField(_('papel'), max_length=20, choices=ROLE_CHOICES, default=VENDEDOR)
     leader = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, 
                                related_name='team_members', verbose_name=_('líder'))
@@ -166,8 +219,8 @@ class User(AbstractUser):
     certificado = models.CharField(_('certificado'), max_length=100, blank=True, null=True)
     matricula = models.CharField(_('matrícula'), max_length=50, blank=True, null=True)
     
-    USERNAME_FIELD = 'cpf'
-    REQUIRED_FIELDS = ['email']
+    USERNAME_FIELD = 'username'
+    REQUIRED_FIELDS = ['email', 'cpf']
     
     objects = UserManager()
     
@@ -179,16 +232,29 @@ class User(AbstractUser):
                 fields=['company', 'matricula'],
                 name='unique_matricula_per_company',
                 condition=models.Q(matricula__isnull=False)
-            )
+            ),
+            models.UniqueConstraint(
+                fields=['login_document', 'role', 'company'],
+                name='unique_user_profile_per_company',
+            ),
         ]
     
     def __str__(self):
         return self.cpf
 
     def save(self, *args, **kwargs):
+        from core.auth_profiles import ensure_profile_credentials
+
         if self.cpf:
             self.cpf = re.sub(r'\D', '', self.cpf)
-        
+
+        # Admin, colaborador e gerente comercial pertencem à promotora — sem vínculo com corban
+        if self.role in (self.ADMIN, self.COLABORADOR, self.GERENTE_COMERCIAL):
+            self.company = None
+            self.leader = None
+
+        ensure_profile_credentials(self)
+
         # Se matrícula não informada, usar CPF como default
         if not self.matricula:
             self.matricula = self.cpf
@@ -218,11 +284,15 @@ class User(AbstractUser):
     @property
     def is_colaborador(self):
         return self.role == self.COLABORADOR
+
+    @property
+    def is_gerente_comercial(self):
+        return self.role == self.GERENTE_COMERCIAL
     
     @property
     def is_promotora_user(self):
-        """Verifica se o usuário é da promotora (ADMIN ou COLABORADOR)"""
-        return self.role in [self.ADMIN, self.COLABORADOR]
+        """Verifica se o usuário é da promotora (ADMIN, COLABORADOR ou GERENTE_COMERCIAL)"""
+        return self.role in [self.ADMIN, self.COLABORADOR, self.GERENTE_COMERCIAL]
     
     @property
     def is_corban_user(self):
@@ -254,6 +324,7 @@ class UserPermission(TimeStampedModel):
     CATEGORY_PAYMENTS = 'payments'
     CATEGORY_REPORTS = 'reports'
     CATEGORY_SETTINGS = 'settings'
+    CATEGORY_COMMERCIAL = 'commercial'
     
     CATEGORY_CHOICES = [
         (CATEGORY_CORBANS, _('Gestão de Corbans')),
@@ -262,6 +333,7 @@ class UserPermission(TimeStampedModel):
         (CATEGORY_PAYMENTS, _('Gestão de Pagamentos')),
         (CATEGORY_REPORTS, _('Relatórios')),
         (CATEGORY_SETTINGS, _('Configurações')),
+        (CATEGORY_COMMERCIAL, _('Área Comercial')),
     ]
     
     user = models.ForeignKey(
@@ -336,6 +408,25 @@ class ExtraData(TimeStampedModel):
     class Meta:
         verbose_name = _('dados adicionais')
         verbose_name_plural = _('dados adicionais')
+
+
+def validate_pix_binding(pix_type, pix_key, cpf=None, cnpj=None):
+    """
+    Garante que chaves PIX do tipo CPF/CNPJ sejam idênticas ao respectivo vínculo
+    (CPF do usuário ou CNPJ do corban). Retorna uma mensagem de erro (str) ou None se válido.
+    """
+    if not pix_type or not pix_key:
+        return None
+    digits = re.sub(r'\D', '', pix_key)
+    if pix_type == ExtraData.PIX_TYPE_CPF:
+        if cpf and digits != re.sub(r'\D', '', cpf):
+            return _('Chave PIX do tipo CPF deve ser igual ao CPF do vínculo.')
+    elif pix_type == ExtraData.PIX_TYPE_CNPJ:
+        if not cnpj:
+            return _('Corban ainda não possui CNPJ cadastrado para validar a chave PIX do tipo CNPJ.')
+        if digits != re.sub(r'\D', '', cnpj):
+            return _('Chave PIX do tipo CNPJ deve ser igual ao CNPJ do corban vinculado.')
+    return None
 
 
 class AuditLog(TimeStampedModel):
@@ -460,9 +551,14 @@ class ImportJob(TimeStampedModel):
     total_rows = models.IntegerField(_('total de linhas'), default=0)
     processed_rows = models.IntegerField(_('linhas processadas'), default=0)
     created_count = models.IntegerField(_('criados'), default=0)
+    updated_count = models.IntegerField(_('atualizados'), default=0)
     error_count = models.IntegerField(_('erros'), default=0)
     errors = models.JSONField(_('detalhes de erros'), default=list)
     file_path = models.CharField(_('caminho do arquivo'), max_length=500, blank=True)
+    error_file_path = models.CharField(_('arquivo de erros (xlsx)'), max_length=500, blank=True)
+    # Quando True, registros já existentes (mesmo CPF/documento) são
+    # atualizados em vez de gerar erro de duplicado.
+    update_existing = models.BooleanField(_('atualizar existentes'), default=False)
     created_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
@@ -632,6 +728,101 @@ class APIKey(TimeStampedModel):
             return api_key
         except cls.DoesNotExist:
             return None
+
+
+class IntegrationIdempotencyRecord(TimeStampedModel):
+    """Registro de idempotência para integrações via API Key."""
+
+    RESOURCE_CORBAN = 'corban'
+    RESOURCE_SELLER = 'seller'
+    RESOURCE_COMMISSION_GROUP = 'commission_group'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    api_key = models.ForeignKey(
+        'APIKey',
+        on_delete=models.CASCADE,
+        related_name='idempotency_records',
+        verbose_name=_('chave de API'),
+    )
+    idempotency_key = models.CharField(_('chave de idempotência'), max_length=128)
+    resource_type = models.CharField(_('tipo de recurso'), max_length=40)
+    resource_id = models.CharField(_('ID do recurso'), max_length=64)
+    response_status = models.PositiveSmallIntegerField(_('status HTTP'))
+    response_body = models.JSONField(_('corpo da resposta'))
+
+    class Meta:
+        verbose_name = _('registro de idempotência')
+        verbose_name_plural = _('registros de idempotência')
+        constraints = [
+            models.UniqueConstraint(
+                fields=['api_key', 'idempotency_key'],
+                name='unique_idempotency_per_api_key',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.resource_type}:{self.idempotency_key}'
+
+
+class PortalUsefulLink(TimeStampedModel):
+    """Link útil publicado pela promotora para aparecer no portal dos corbans."""
+
+    title = models.CharField(_('título'), max_length=180)
+    url = models.URLField(_('URL'))
+    is_active = models.BooleanField(_('ativo'), default=True)
+    display_order = models.PositiveIntegerField(_('ordem de exibição'), default=0)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='portal_useful_links_created',
+        verbose_name=_('criado por'),
+    )
+
+    class Meta:
+        verbose_name = _('link útil do portal')
+        verbose_name_plural = _('links úteis do portal')
+        ordering = ['display_order', '-created_at']
+
+    def __str__(self):
+        return self.title
+
+
+class PortalWallMessage(TimeStampedModel):
+    """Mensagem do mural exibida no portal dos corbans."""
+
+    title = models.CharField(_('título'), max_length=180)
+    message = models.TextField(_('mensagem'))
+    company = models.ForeignKey(
+        Company,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='portal_wall_messages',
+        verbose_name=_('corban alvo'),
+        help_text=_('Deixe vazio para publicar para todos os corbans.'),
+    )
+    starts_at = models.DateTimeField(_('início de exibição'), null=True, blank=True)
+    ends_at = models.DateTimeField(_('fim de exibição'), null=True, blank=True)
+    is_active = models.BooleanField(_('ativo'), default=True)
+    display_order = models.PositiveIntegerField(_('ordem de exibição'), default=0)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='portal_wall_messages_created',
+        verbose_name=_('criado por'),
+    )
+
+    class Meta:
+        verbose_name = _('mensagem do mural do portal')
+        verbose_name_plural = _('mensagens do mural do portal')
+        ordering = ['display_order', '-created_at']
+
+    def __str__(self):
+        return self.title
 
 
 class PushSubscription(models.Model):

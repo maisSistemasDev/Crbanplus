@@ -1,6 +1,7 @@
 export const ENDPOINTS = {
   // Auth
   TOKEN: '/token/',
+  TOKEN_SELECT_PROFILE: '/token/select-profile/',
   TOKEN_REFRESH: '/token/refresh/',
   CURRENT_USER: '/users/me/',
   PROFILE_SETTINGS: '/users/me/',
@@ -14,6 +15,7 @@ export const ENDPOINTS = {
   // Users
   USERS: '/users/',
   USER_DETAIL: (id: number) => `/users/${id}/`,
+  USER_ACTIVATION: (id: number) => `/users/${id}/activation/`,
   SELLERS: '/users/sellers/',
   SELLER_DETAIL: (id: number) => `/users/sellers/${id}/`,
   LEADERS: '/users/leaders/',
@@ -27,8 +29,8 @@ export const ENDPOINTS = {
   INTERNAL_USERS: '/internal-users/',
   INTERNAL_USER_DETAIL: (id: number) => `/internal-users/${id}/`,
   INTERNAL_USER_PERMISSIONS: (id: number) => `/internal-users/${id}/permissions/`,
-  AVAILABLE_PERMISSIONS: '/internal-users/available-permissions/',
-  INTERNAL_USER_FORM_FIELDS: '/internal-users/form-fields/',
+  AVAILABLE_PERMISSIONS: '/internal-users/available_permissions/',
+  INTERNAL_USER_FORM_FIELDS: '/internal-users/form_fields/',
   
   // Permission Templates
   PERMISSION_TEMPLATES: '/permission-templates/',
@@ -37,6 +39,7 @@ export const ENDPOINTS = {
 
   // Companies
   COMPANIES: '/companies/',
+  COMPANY_ACTIVATION: (id: string) => `/companies/${id}/activation/`,
   COMPANY_DETAIL: (id: string) => `/companies/${id}/`,
 
   // Banks
@@ -44,6 +47,7 @@ export const ENDPOINTS = {
   BANK_DETAIL: (id: string) => `/banks/${id}/`,
   AGREEMENTS: '/agreements/',
   AGREEMENT_DETAIL: (id: string) => `/agreements/${id}/`,
+  AGREEMENTS_BULK_DELETE: '/agreements/bulk-delete/',
   TABLES: '/tables/',
   TABLE_DETAIL: (id: string) => `/tables/${id}/`,
   TABLES_BULK_DELETE: '/tables/bulk-delete/',
@@ -60,10 +64,12 @@ export const ENDPOINTS = {
 
   // Proposals
   PROPOSALS: '/proposals/',
+  PROPOSALS_EXPORT: '/proposals/export/',
   PREVIEW_ROWS: '/proposals/preview-rows/',
   PROPOSAL_FIELDS: '/proposals/fields/',
   LAYOUTS: '/proposals/layouts/',
   LAYOUT_DETAIL: (id: string) => `/proposals/layouts/${id}/`,
+  LAYOUTS_BULK_DELETE: '/proposals/layouts/bulk-delete/',
   BATCHES: '/proposals/batch/',
   BATCH_DETAIL: (id: string) => `/proposals/batch/${id}/`,
   BATCH_PROPOSALS: (id: string) => `/proposals/batch/${id}/proposals/`,
@@ -77,6 +83,8 @@ export const ENDPOINTS = {
   COMMISSIONS: '/commissions/',
   COMMISSION_DETAIL: (id: number) => `/commissions/${id}/`,
   COMMISSION_MIRROR: '/commissions/mirror/',
+  COMMISSIONS_CONSOLIDATED: '/commissions/consolidated/',
+  COMMISSION_DEBIT_DETAIL: '/commissions/debit-detail/',
   COMMISSION_BALANCE: '/commissions/balance/',
   COMMISSION_RELEASE: '/commissions/release/',
   COMMISSION_EXPORT: '/commissions/export/',
@@ -86,6 +94,10 @@ export const ENDPOINTS = {
   COMMISSION_GROUPS: '/commission-groups/',
   COMMISSION_GROUP_DETAIL: (id: number) => `/commission-groups/${id}/`,
   COMMISSION_GROUP_MEMBERS: (id: number) => `/commission-groups/${id}/members/`,
+  COMMISSION_GROUP_REGISTRATION_LINKS: (id: number) =>
+    `/commission-groups/${id}/registration-links/`,
+  COMMISSION_GROUP_REGISTRATION_LINK_DETAIL: (groupId: number, linkId: string) =>
+    `/commission-groups/${groupId}/registration-links/${linkId}/`,
   COMMISSION_GROUPS_BY_COMPANY: '/commission-groups/by-company/',
   COMMISSION_GROUP_BY_COMPANY_DETAIL: (id: number) => `/commission-groups/by-company/${id}/`,
   COMMISSION_GROUP_BY_COMPANY_COMPANIES: (id: number) => `/commission-groups/by-company/${id}/companies/`,
@@ -96,6 +108,9 @@ export const ENDPOINTS = {
 
   // Payments
   PAYMENTS: '/payments/',
+  DEBITS: '/debits/',
+  DEBIT_DETAIL: (id: number) => `/debits/${id}/`,
+  CLAIMS: '/claims/',
   WITHDRAWALS: '/withdrawals/',
   WITHDRAWALS_CORBANPAY: '/withdrawals/corbanpay/',
   GENERATE_COMMISSIONS: '/payments/generate-comissions/',
@@ -103,9 +118,17 @@ export const ENDPOINTS = {
   // Push Notifications
   PUSH_SUBSCRIBE: '/push/subscribe/',
 
+  // Portal Content
+  PORTAL_USEFUL_LINKS: '/portal/useful-links/',
+  PORTAL_USEFUL_LINK_DETAIL: (id: number) => `/portal/useful-links/${id}/`,
+  PORTAL_WALL_MESSAGES: '/portal/wall-messages/',
+  PORTAL_WALL_MESSAGE_DETAIL: (id: number) => `/portal/wall-messages/${id}/`,
+  PORTAL_CONTENT_FEED: '/portal/content-feed/',
+
   // Importação em lote
   IMPORT_CREATE: '/import/',
   IMPORT_STATUS: (jobId: string) => `/import/${jobId}/`,
+  IMPORT_ERRORS_XLSX: (jobId: string) => `/import/${jobId}/errors.xlsx/`,
   IMPORT_TEMPLATE: (entityType: string) => `/import/template/${entityType}/`,
 
   // Form Fields
@@ -129,10 +152,38 @@ export const ENDPOINTS = {
   API_KEY_REVOKE: (id: string) => `/api-keys/${id}/revoke/`,
   API_KEY_AVAILABLE_SCOPES: '/api-keys/available-scopes/',
 
+  // Comercial
+  COMMERCIAL_MANAGERS: '/commercial/managers/',
+  COMMERCIAL_MANAGER_DETAIL: (id: number) => `/commercial/managers/${id}/`,
+  COMMERCIAL_MANAGER_ACTIVATION: (id: number) => `/commercial/managers/${id}/activation/`,
+  COMMERCIAL_TEAM: '/commercial/team/',
+  COMMERCIAL_TEAM_MEMBER_DETAIL: (id: number) => `/commercial/team/${id}/`,
+  COMMERCIAL_DASHBOARD: '/commercial/dashboard/',
+
   // AI Agent
   AI_SUGGESTIONS: '/ai/suggestions/',
   AI_SUGGESTION_ACCEPT: (id: number) => `/ai/suggestions/${id}/accept/`,
   AI_SUGGESTION_REJECT: (id: number) => `/ai/suggestions/${id}/reject/`,
   AI_CONVERSATIONS: '/ai/conversations/',
   AI_CONVERSATION_DETAIL: (id: number) => `/ai/conversations/${id}/`,
+  AI_SUGGEST_MAPPING: '/ai/suggest-mapping/',
+
+  // Proposal ETL
+  PROPOSAL_ETL_CONFIGS: '/proposal-etl/configs/',
+  PROPOSAL_ETL_DETAIL: (id: string) => `/proposal-etl/configs/${id}/`,
+  PROPOSAL_ETL_TEST_NODE: (id: string) => `/proposal-etl/configs/${id}/test-node/`,
+  PROPOSAL_ETL_RUN: (id: string) => `/proposal-etl/configs/${id}/run/`,
+  PROPOSAL_ETL_RUN_DETAIL: (runId: string) => `/proposal-etl/runs/${runId}/`,
+  PROPOSAL_ETL_RUNS: (id: string) => `/proposal-etl/configs/${id}/runs/`,
+  PROPOSAL_ETL_META: '/proposal-etl/meta/',
+  PROPOSAL_ETL_LAYOUT_FIELDS: '/proposal-etl/layout-fields/',
+  PROPOSAL_ETL_GENERATE_FROM_DOC: '/proposal-etl/generate-from-doc/',
+  PROPOSAL_ETL_BANK_PROFILE: (bankId: string) => `/proposal-etl/bank-profiles/${bankId}/`,
+
+  // Webhooks (propostas inbound)
+  WEBHOOKS: '/webhooks/endpoints/',
+  WEBHOOK_DETAIL: (id: string) => `/webhooks/endpoints/${id}/`,
+  WEBHOOK_REGENERATE_SECRET: (id: string) => `/webhooks/endpoints/${id}/regenerate-secret/`,
+  WEBHOOK_DELIVERIES: (id: string) => `/webhooks/endpoints/${id}/deliveries/`,
+  WEBHOOK_TEST: (id: string) => `/webhooks/endpoints/${id}/test/`,
 } as const;

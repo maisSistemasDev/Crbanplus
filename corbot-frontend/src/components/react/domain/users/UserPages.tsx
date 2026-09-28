@@ -29,7 +29,7 @@ export function UserListPage() {
 export function UserSellersPage() {
   return (
     <PageShell>
-      <UserList title="Vendedores" showCreateButton={false} role="vendedor" />
+      <UserList title="Vendedores" showCreateButton={false} role="vendedor" showCompanyFilter />
     </PageShell>
   );
 }
@@ -37,7 +37,7 @@ export function UserSellersPage() {
 export function UserLeadersPage() {
   return (
     <PageShell>
-      <UserList title="Lideres" showCreateButton={false} role="lider" />
+      <UserList title="Lideres" showCreateButton={false} role="lider" showCompanyFilter />
     </PageShell>
   );
 }
@@ -45,7 +45,7 @@ export function UserLeadersPage() {
 export function UserManagersPage() {
   return (
     <PageShell>
-      <UserList title="Gerentes" showCreateButton={false} role="gerente" />
+      <UserList title="Gerentes" showCreateButton={false} role="gerente" showCompanyFilter />
     </PageShell>
   );
 }

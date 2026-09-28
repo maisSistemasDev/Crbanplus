@@ -2,7 +2,19 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.utils.translation import gettext_lazy as _
 
-from .models import User, ExtraData, AuditLog, ActionLog, Company, UserPermission, PermissionTemplate, APIKey, SystemSettings
+from .models import (
+    User,
+    ExtraData,
+    AuditLog,
+    ActionLog,
+    Company,
+    UserPermission,
+    PermissionTemplate,
+    APIKey,
+    SystemSettings,
+    PortalUsefulLink,
+    PortalWallMessage,
+)
 
 
 @admin.register(APIKey)
@@ -110,4 +122,20 @@ class PermissionTemplateAdmin(admin.ModelAdmin):
         (_('Permissões'), {'fields': ('permissions',)}),
         (_('Datas'), {'fields': ('created_at', 'updated_at')}),
     )
+
+
+@admin.register(PortalUsefulLink)
+class PortalUsefulLinkAdmin(admin.ModelAdmin):
+    list_display = ('title', 'url', 'display_order', 'is_active', 'created_by', 'created_at')
+    list_filter = ('is_active', 'created_at')
+    search_fields = ('title', 'url')
+    readonly_fields = ('created_at', 'updated_at')
+
+
+@admin.register(PortalWallMessage)
+class PortalWallMessageAdmin(admin.ModelAdmin):
+    list_display = ('title', 'company', 'display_order', 'is_active', 'starts_at', 'ends_at', 'created_at')
+    list_filter = ('is_active', 'company', 'created_at')
+    search_fields = ('title', 'message')
+    readonly_fields = ('created_at', 'updated_at')
  

@@ -1,27 +1,52 @@
 import { useStore } from '@nanostores/react';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { pendingTour } from '../../../lib/tour/store';
-import { startTour, resumeTourIfPending } from '../../../lib/tour/driver';
+import { saveTourState, startTour, resumeTourIfPending, clearTour, peekSavedTour } from '../../../lib/tour/driver';
+
+const TOUR_NAV_KEY = 'corbanplus_tour_nav';
 
 /**
  * Componente invisível montado no DashboardLayout.
- * 1. Resume tour salvo no localStorage (navegação cross-page)
+ * 1. Resume tour salvo somente após navegação intencional do tour
  * 2. Escuta o pendingTour store para tours iniciados no chat
  */
 export function TourListener() {
   const steps = useStore(pendingTour);
+  const resumeAttempted = useRef(false);
 
-  // Resume tour do localStorage ao carregar cada página
   useEffect(() => {
-    resumeTourIfPending();
+    if (resumeAttempted.current) return;
+    resumeAttempted.current = true;
+
+    const timer = window.setTimeout(() => {
+      if (sessionStorage.getItem(TOUR_NAV_KEY) === '1') {
+        void resumeTourIfPending();
+      } else if (peekSavedTour()) {
+        clearTour();
+      }
+    }, 500);
+    return () => window.clearTimeout(timer);
   }, []);
 
-  // Reage a tours iniciados pelo chat widget
   useEffect(() => {
-    if (steps && steps.length > 0) {
-      startTour(steps);
-      pendingTour.set(null);
-    }
+    if (!steps?.length) return;
+
+    let cancelled = false;
+
+    void (async () => {
+      saveTourState(steps, 0);
+      await new Promise((r) => setTimeout(r, 600));
+      if (cancelled) return;
+
+      const started = await startTour(steps, 0);
+      if (!cancelled && started) {
+        pendingTour.set(null);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [steps]);
 
   return null;

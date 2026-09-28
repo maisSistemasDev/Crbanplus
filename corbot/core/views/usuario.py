@@ -13,6 +13,7 @@ from core.models import User, ExtraData
 from core.serializers import UserSerializer, UserCreateSerializer, UserListSerializer, CreateManagerSerializer
 from core.permissions import IsAdmin, IsAdminOrEmpresaAdmin
 from core.exceptions import format_serializer_errors
+from core.search_utils import apply_user_list_search, paginate_queryset
 
 
 class UserListCreateView(BaseApiView):
@@ -25,30 +26,50 @@ class UserListCreateView(BaseApiView):
         """
         Lista os usuários de acordo com a hierarquia do usuário autenticado.
         """
-        if(request.user.role == User.ADMIN):
-            users = User.objects.filter(role__in=[User.ADMIN, User.EMPRESA_ADMIN, User.GERENTE])
-        elif(request.user.role == User.EMPRESA_ADMIN):
-            users = User.objects.filter(company=request.user.company, role__in=[User.GERENTE, User.LIDER, User.VENDEDOR])
-        elif(request.user.role == User.GERENTE):
-            users = User.objects.filter(company=request.user.company, role__in=[User.VENDEDOR, User.LIDER])
-        elif(request.user.role == User.LIDER):
+        search = request.query_params.get('search', '').strip()
+        role = request.query_params.get('role', '').strip()
+        company_id = request.query_params.get('company', '').strip()
+
+        if request.user.role in (User.ADMIN, User.COLABORADOR):
+            # Promotora controla toda a rede de corbans
+            corban_roles = [User.EMPRESA_ADMIN, User.GERENTE, User.LIDER, User.VENDEDOR]
+            if role:
+                users = User.objects.filter(role=role)
+            else:
+                users = User.objects.filter(role__in=corban_roles)
+        elif request.user.role == User.GERENTE_COMERCIAL:
+            from commercial.services import team_company_ids_for
+            company_ids = team_company_ids_for(request.user)
+            users = User.objects.filter(
+                company_id__in=company_ids,
+                role__in=[User.EMPRESA_ADMIN, User.GERENTE, User.LIDER, User.VENDEDOR],
+            )
+        elif request.user.role == User.EMPRESA_ADMIN:
+            users = User.objects.filter(
+                company=request.user.company,
+                role__in=[User.EMPRESA_ADMIN, User.GERENTE, User.LIDER, User.VENDEDOR],
+            )
+        elif request.user.role == User.GERENTE:
+            users = User.objects.filter(
+                company=request.user.company,
+                role__in=[User.VENDEDOR, User.LIDER],
+            )
+        elif request.user.role == User.LIDER:
             users = User.objects.filter(leader=request.user)
         else:
-            users = User.objects.filter(company=request.user.company, role__in=[User.VENDEDOR, User.LIDER])
-
-        search = request.query_params.get('search', '').strip()
-        if search:
-            from django.db.models import Q
-            users = users.filter(
-                Q(first_name__icontains=search) |
-                Q(last_name__icontains=search) |
-                Q(cpf__icontains=search) |
-                Q(email__icontains=search)
+            users = User.objects.filter(
+                company=request.user.company,
+                role__in=[User.VENDEDOR, User.LIDER],
             )
 
-        role = request.query_params.get('role', '').strip()
-        if role:
+        users = apply_user_list_search(users, search)
+
+        # Filtro por role para perfis de corban (promotora já filtrou acima)
+        if role and request.user.role not in (User.ADMIN, User.COLABORADOR):
             users = users.filter(role=role)
+
+        if company_id:
+            users = users.filter(company_id=company_id)
 
         self.log_info(
             request=request,
@@ -56,12 +77,7 @@ class UserListCreateView(BaseApiView):
             message=f'Usuário listou usuários'
         )
 
-        from rest_framework.pagination import PageNumberPagination
-        paginator = PageNumberPagination()
-        paginator.page_size = 10
-        page = paginator.paginate_queryset(users, request)
-        serializer = UserListSerializer(page, many=True)
-        return paginator.get_paginated_response(serializer.data)
+        return paginate_queryset(request, users, UserListSerializer)
     
     def post(self, request, format=None):
         """
@@ -98,7 +114,10 @@ class UserDetailView(BaseApiView):
     """
     def get_permissions(self):
         if self.request.method in ['PUT', 'PATCH', 'DELETE']:
-            permission_classes = [IsAdminOrEmpresaAdmin]
+            if self.request.user.is_authenticated and self.request.user.role == User.GERENTE_COMERCIAL:
+                permission_classes = [permissions.IsAuthenticated]
+            else:
+                permission_classes = [IsAdminOrEmpresaAdmin]
         else:
             permission_classes = [permissions.IsAuthenticated]
         return [permission() for permission in permission_classes]
@@ -106,9 +125,13 @@ class UserDetailView(BaseApiView):
     def get_object(self, pk):
         user = get_object_or_404(User, pk=pk)
         requester = self.request.user
-        # Empresa admin can only modify users in their company
         if requester.role == User.EMPRESA_ADMIN:
             if not user.company or user.company != requester.company:
+                self.permission_denied(self.request)
+        if requester.role == User.GERENTE_COMERCIAL:
+            from commercial.services import team_company_ids_for
+            company_ids = team_company_ids_for(requester)
+            if not user.company_id or user.company_id not in company_ids:
                 self.permission_denied(self.request)
         self.check_object_permissions(self.request, user)
         return user
@@ -173,16 +196,34 @@ class UserDetailView(BaseApiView):
         # Captura os dados antes da atualização
         old_data = UserSerializer(user).data
         
-        serializer = UserSerializer(user, data=request.data, partial=True)
+        payload = request.data
+        if request.user.role == User.GERENTE_COMERCIAL:
+            allowed = {}
+            if 'email' in request.data:
+                allowed['email'] = request.data.get('email')
+            if 'password' in request.data:
+                allowed['password'] = request.data.get('password')
+            extra = request.data.get('extra_data') or {}
+            pix = {}
+            if isinstance(extra, dict):
+                if 'pix_key' in extra:
+                    pix['pix_key'] = extra.get('pix_key')
+                if 'pix_type' in extra:
+                    pix['pix_type'] = extra.get('pix_type')
+            if pix:
+                allowed['extra_data'] = pix
+            payload = allowed
+        
+        serializer = UserSerializer(user, data=payload, partial=True)
             
         if serializer.is_valid():
             updated_user = serializer.save()
             #se o vendedor for convertido para líder, remove o líder vinculado
-            if(old_data['role'] == User.VENDEDOR and request.data['role'] == User.LIDER):
+            if(old_data['role'] == User.VENDEDOR and request.data.get('role') == User.LIDER):
                 updated_user.leader = None
                 updated_user.save()
-                
-            if(old_data['company'] != request.data['company'] and request.data['role'] == User.LIDER):
+
+            if(old_data['company'] != request.data.get('company', old_data['company']) and request.data.get('role') == User.LIDER):
                 sellers = User.objects.filter(leader=user)
                 for seller in sellers:
                     seller.leader = None
@@ -213,6 +254,11 @@ class UserDetailView(BaseApiView):
         """
         Exclui um usuário específico.
         """
+        if request.user.role == User.GERENTE_COMERCIAL:
+            return Response(
+                {'detail': 'Gerente comercial não pode excluir usuários.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         user = self.get_object(pk)
         
         # Captura os dados antes da exclusão
@@ -236,6 +282,63 @@ class UserDetailView(BaseApiView):
         user.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+
+class UserActivationView(BaseApiView):
+    """
+    API endpoint para inativar/reativar um usuário, com registro de
+    data/hora, motivo e responsável pela inativação.
+    """
+    permission_classes = [IsAdminOrEmpresaAdmin]
+
+    def get_object(self, pk):
+        user = get_object_or_404(User, pk=pk)
+        requester = self.request.user
+        if requester.role == User.EMPRESA_ADMIN:
+            if not user.company or user.company != requester.company:
+                self.permission_denied(self.request)
+        return user
+
+    def post(self, request, pk, format=None):
+        """
+        Body: {"action": "deactivate", "reason": "..."} ou {"action": "activate"}.
+        """
+        user = self.get_object(pk)
+        action = (request.data.get('action') or 'deactivate').strip().lower()
+        old_data = UserSerializer(user).data
+
+        if action == 'activate':
+            user.reactivate()
+            message = f'Usuário reativou o usuário: {user.cpf}'
+            audit_action = 'activate_user'
+        else:
+            reason = (request.data.get('reason') or '').strip()
+            if not reason:
+                return Response(
+                    {'detail': 'Motivo da inativação é obrigatório (reason).'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            user.deactivate(by_user=request.user, reason=reason)
+            message = f'Usuário inativou o usuário: {user.cpf} (motivo: {reason})'
+            audit_action = 'deactivate_user'
+
+        serializer = UserSerializer(user)
+        self.audit_update(
+            request=request,
+            instance=user,
+            data_before=old_data,
+            data_after=serializer.data,
+        )
+        self.log_info(
+            request=request,
+            action=audit_action,
+            message=message,
+            data={
+                'user_id': user.id,
+                'inactivated_at': user.inactivated_at.isoformat() if user.inactivated_at else None,
+                'inactivation_reason': user.inactivation_reason,
+            },
+        )
+        return Response(serializer.data)
 
 
 class CreateManagerView(generics.CreateAPIView):

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { CrudPage } from '../shared/CrudPage';
+import { resolveMediaUrl } from '../../../../lib/api/client';
 import { ENDPOINTS } from '../../../../lib/api/endpoints';
 import { Badge } from '../../ui/Badge';
 import { Button } from '../../ui/Button';
@@ -15,7 +16,7 @@ const columns: Column<Record<string, unknown>>[] = [
     render: (item) => (
       <div className="flex items-center gap-3">
         {item.logo && (
-          <img src={item.logo as string} alt="" className="h-8 w-8 rounded object-contain" />
+          <img src={resolveMediaUrl(item.logo as string)!} alt="" className="h-8 w-8 rounded object-contain" />
         )}
         <span className="font-medium text-gray-900">{item.name as string}</span>
       </div>

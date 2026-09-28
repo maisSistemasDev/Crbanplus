@@ -17,7 +17,7 @@ export default defineConfig({
         strategies: 'generateSW',
         workbox: {
           navigateFallback: null,
-          globPatterns: ['**/*.{js,css,html,ico,png,svg,webp}'],
+          globPatterns: ['**/*.{ico,png,svg,webp}'],
           runtimeCaching: [
             {
               urlPattern: /^\/api\/.*/i,

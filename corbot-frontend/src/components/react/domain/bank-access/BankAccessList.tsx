@@ -1,20 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { CrudPage } from '../shared/CrudPage';
 import { ENDPOINTS } from '../../../../lib/api/endpoints';
 import { api } from '../../../../lib/api/client';
 import { Badge } from '../../ui/Badge';
-import { formatDate } from '../../../../lib/utils/format';
+import { SearchSelect } from '../../ui/SearchSelect';
 import type { Column } from '../../ui/DataTable';
+import { buildBankAccessFormFields } from './formFields';
 
 const columns: Column<Record<string, unknown>>[] = [
   {
     key: 'bank_name',
     header: 'Banco',
-    sortable: true,
-  },
-  {
-    key: 'company_name',
-    header: 'Empresa',
     sortable: true,
   },
   {
@@ -29,9 +25,31 @@ const columns: Column<Record<string, unknown>>[] = [
     ),
   },
   {
-    key: 'last_access',
-    header: 'Ultimo Acesso',
-    render: (item) => item.last_access ? formatDate(item.last_access as string) : '-',
+    key: 'is_master',
+    header: 'Master',
+    render: (item) => (
+      <Badge variant={item.is_master ? 'warning' : 'default'}>
+        {item.is_master ? 'Corban' : 'Equipe'}
+      </Badge>
+    ),
+  },
+  {
+    key: 'notes',
+    header: 'Obs.',
+    render: (item) => (item.notes as string) || '-',
+  },
+  {
+    key: 'link',
+    header: 'Link',
+    render: (item) => {
+      const link = item.link as string;
+      if (!link) return '-';
+      return (
+        <a href={link} target="_blank" rel="noopener noreferrer" className="text-blue-600 text-xs underline">
+          Abrir
+        </a>
+      );
+    },
   },
   {
     key: 'is_active',
@@ -57,17 +75,17 @@ export function BankAccessList() {
     }).catch(() => {});
   }, []);
 
+  const bankOptions = useMemo(() => banks.map((b) => ({ value: b.id, label: b.name })), [banks]);
+
   const bankFilter = (
-    <select
+    <SearchSelect
+      className="w-full sm:w-56"
+      placeholder="Todos os bancos"
+      allowEmpty
       value={selectedBank}
+      options={bankOptions}
       onChange={(e) => setSelectedBank(e.target.value)}
-      className="h-9 rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-    >
-      <option value="">Todos os bancos</option>
-      {banks.map((b) => (
-        <option key={b.id} value={b.id}>{b.name}</option>
-      ))}
-    </select>
+    />
   );
 
   return (
@@ -80,6 +98,8 @@ export function BankAccessList() {
       searchPlaceholder="Buscar acesso..."
       customActions={bankFilter}
       extraParams={selectedBank ? { bank: selectedBank } : {}}
+      filterFormFields={(fields, item) => buildBankAccessFormFields(fields, { isEdit: !!item })}
+      getEditModalTitle={(item) => String(item.bank_name || 'Acesso')}
     />
   );
 }

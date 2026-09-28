@@ -26,6 +26,9 @@ interface DataTableProps<T> {
   selectable?: boolean;
   selectedKeys?: Set<string>;
   onSelectionChange?: (keys: Set<string>) => void;
+  /** Coluna extra de ações no fim da linha (ex.: botão de editar). */
+  rowActions?: (item: T) => React.ReactNode;
+  compact?: boolean;
 }
 
 type SortDir = 'asc' | 'desc' | null;
@@ -44,6 +47,8 @@ export function DataTable<T extends Record<string, unknown>>({
   selectable = false,
   selectedKeys,
   onSelectionChange,
+  rowActions,
+  compact = false,
 }: DataTableProps<T>) {
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>(null);
@@ -106,14 +111,16 @@ export function DataTable<T extends Record<string, unknown>>({
   if (loading) return <PageSpinner />;
   if (data.length === 0) return <EmptyState title={emptyMessage} />;
 
+  const cellPad = compact ? 'px-2 py-1' : 'px-3 py-2';
+
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+    <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className={clsx('w-full', compact ? 'text-[11px] leading-tight' : 'text-sm')}>
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50/50">
               {selectable && (
-                <th className="px-4 py-3 w-10">
+                <th className={clsx(cellPad, 'w-8')}>
                   <input
                     type="checkbox"
                     checked={allSelected}
@@ -127,7 +134,9 @@ export function DataTable<T extends Record<string, unknown>>({
                 <th
                   key={col.key}
                   className={clsx(
-                    'px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider',
+                    cellPad,
+                    compact ? 'text-[10px]' : 'text-[11px]',
+                    'text-left font-medium text-gray-500 uppercase tracking-wider',
                     col.sortable && 'cursor-pointer select-none hover:text-gray-700',
                     col.className,
                   )}
@@ -145,6 +154,11 @@ export function DataTable<T extends Record<string, unknown>>({
                   </span>
                 </th>
               ))}
+              {rowActions && (
+                <th className={clsx(cellPad, 'w-1 text-right text-[10px] font-medium text-gray-500 uppercase tracking-wider')}>
+                  Ações
+                </th>
+              )}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
@@ -165,7 +179,7 @@ export function DataTable<T extends Record<string, unknown>>({
                   }}
                 >
                   {selectable && (
-                    <td className="px-4 py-3 w-10" onClick={(e) => e.stopPropagation()}>
+                    <td className={clsx(cellPad, 'w-8')} onClick={(e) => e.stopPropagation()}>
                       <input
                         type="checkbox"
                         checked={isSelected}
@@ -177,7 +191,7 @@ export function DataTable<T extends Record<string, unknown>>({
                   {columns.map((col) => (
                     <td
                       key={col.key}
-                      className={clsx('px-4 py-3 text-gray-700', col.className)}
+                      className={clsx(cellPad, 'text-gray-700', col.className)}
                       onClick={() => !selectable && onRowClick?.(item)}
                     >
                       {col.render
@@ -185,6 +199,14 @@ export function DataTable<T extends Record<string, unknown>>({
                         : (item[col.key] as React.ReactNode) ?? '-'}
                     </td>
                   ))}
+                  {rowActions && (
+                    <td
+                      className={clsx(cellPad, 'text-right whitespace-nowrap')}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {rowActions(item)}
+                    </td>
+                  )}
                 </tr>
               );
             })}

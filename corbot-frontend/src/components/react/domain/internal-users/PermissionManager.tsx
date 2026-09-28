@@ -1,6 +1,11 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../../../lib/api/client';
 import { ENDPOINTS } from '../../../../lib/api/endpoints';
+import { extractErrorMessage } from '../../../../lib/api/errors';
+import toast from 'react-hot-toast';
+import { Button } from '../../ui/Button';
+import { PageHeader } from '../../ui/PageHeader';
+import { COLABORADORES_ROUTES } from '../../../../lib/routes/colaboradores';
 import type { 
   InternalUser, 
   UserPermission, 
@@ -49,9 +54,8 @@ export default function PermissionManager({ userId }: PermissionManagerProps) {
         ENDPOINTS.AVAILABLE_PERMISSIONS
       );
       setAvailablePermissions(availableResponse);
-    } catch (err: any) {
-      console.error('Erro ao carregar dados:', err);
-      setError(err.response?.data?.detail || 'Erro ao carregar dados');
+    } catch (err) {
+      setError(extractErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -116,11 +120,12 @@ export default function PermissionManager({ userId }: PermissionManagerProps) {
         { permissions: permissionsToSave }
       );
 
-      alert(response.message || 'Permissões atualizadas com sucesso!');
-      window.location.href = '/internal-users';
-    } catch (err: any) {
-      console.error('Erro ao salvar permissões:', err);
-      setError(err.response?.data?.detail || 'Erro ao salvar permissões');
+      toast.success(response.message || 'Permissões atualizadas com sucesso.');
+      window.location.href = COLABORADORES_ROUTES.list;
+    } catch (err) {
+      const msg = extractErrorMessage(err);
+      setError(msg);
+      toast.error(msg);
     } finally {
       setSaving(false);
     }
@@ -128,40 +133,26 @@ export default function PermissionManager({ userId }: PermissionManagerProps) {
 
   if (loading) {
     return (
-      <div className="container mx-auto p-6">
-        <div className="flex items-center justify-center h-64">
-          <div className="text-gray-500">Carregando...</div>
-        </div>
+      <div className="flex items-center justify-center h-48">
+        <div className="animate-spin h-6 w-6 border-2 border-[var(--color-primary)] border-t-transparent rounded-full" />
       </div>
     );
   }
 
   if (!userId) {
-    return (
-      <div className="container mx-auto p-6">
-        <div className="text-center text-red-600">ID do usuário não fornecido</div>
-      </div>
-    );
+    return <p className="text-sm text-red-600">ID do usuário não fornecido.</p>;
   }
 
   if (!user) {
-    return (
-      <div className="container mx-auto p-6">
-        <div className="text-center text-red-600">Usuário não encontrado</div>
-      </div>
-    );
+    return <p className="text-sm text-red-600">Usuário não encontrado.</p>;
   }
 
   return (
-    <div className="container mx-auto p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">
-          Gerenciar Permissões
-        </h1>
-        <p className="text-gray-600 mt-2">
-          Configurar permissões para <strong>{user.first_name} {user.last_name}</strong>
-        </p>
-      </div>
+    <div>
+      <PageHeader
+        title="Gerenciar permissões"
+        subtitle={`${user.first_name} ${user.last_name}`}
+      />
 
       {error && (
         <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
@@ -212,21 +203,13 @@ export default function PermissionManager({ userId }: PermissionManagerProps) {
           <div className="text-sm text-gray-600">
             {selectedPermissions.size} permissão(ões) selecionada(s)
           </div>
-          <div className="flex gap-3">
-            <button
-              onClick={() => window.location.href = '/internal-users'}
-              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-              disabled={saving}
-            >
+          <div className="flex gap-2">
+            <Button variant="secondary" size="sm" onClick={() => { window.location.href = COLABORADORES_ROUTES.list; }} disabled={saving}>
               Cancelar
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-            >
-              {saving ? 'Salvando...' : 'Salvar Permissões'}
-            </button>
+            </Button>
+            <Button size="sm" onClick={handleSave} loading={saving}>
+              Salvar permissões
+            </Button>
           </div>
         </div>
       </div>

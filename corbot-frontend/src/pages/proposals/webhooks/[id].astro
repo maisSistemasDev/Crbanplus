@@ -1,0 +1,9 @@
+---
+import DashboardLayout from '../../../layouts/DashboardLayout.astro';
+import { WebhookEditPage } from '../../../components/react/domain/webhooks/WebhookPages';
+
+const { id } = Astro.params;
+---
+<DashboardLayout title="Webhook - CorbanPlus">
+  {id && <WebhookEditPage client:only="react" webhookId={id} />}
+</DashboardLayout>

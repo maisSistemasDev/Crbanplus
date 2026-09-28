@@ -1,0 +1,7 @@
+---
+import DashboardLayout from '../../layouts/DashboardLayout.astro';
+import { DebitListPage } from '../../components/react/domain/payments/PaymentPages';
+---
+<DashboardLayout title="Debitos - CorbanPlus">
+  <DebitListPage client:only="react" />
+</DashboardLayout>

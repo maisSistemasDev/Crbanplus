@@ -61,11 +61,11 @@ export function BatchUpload() {
 
   return (
     <div className="animate-fadeIn">
-      <div className="flex items-center gap-3 mb-6">
+      <div className="flex items-center gap-2 mb-4">
         <Button variant="ghost" size="sm" onClick={() => (window.location.href = `${window.location.origin}/proposals/batches`)}>
           <ArrowLeft size={16} />
         </Button>
-        <h1 className="text-2xl font-bold text-gray-900">Enviar Lote de Propostas</h1>
+        <h1 className="page-title">Enviar lote de propostas</h1>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 max-w-xl transition-all duration-300">

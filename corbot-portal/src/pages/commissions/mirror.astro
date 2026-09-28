@@ -1,0 +1,10 @@
+---
+import PortalLayout from '../../layouts/PortalLayout.astro';
+import { AppShell } from '../../components/react/layout/AppShell';
+import { CommissionMirror } from '../../components/react/domain/commissions/CommissionMirror';
+---
+<PortalLayout title="Espelho de comissões - Portal Corban">
+  <AppShell client:only="react">
+    <CommissionMirror client:only="react" />
+  </AppShell>
+</PortalLayout>

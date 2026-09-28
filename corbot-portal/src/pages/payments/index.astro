@@ -1,0 +1,10 @@
+---
+import PortalLayout from '../../layouts/PortalLayout.astro';
+import { AppShell } from '../../components/react/layout/AppShell';
+import { Payments } from '../../components/react/domain/payments/Payments';
+---
+<PortalLayout title="Pagamentos - Portal Corban">
+  <AppShell client:only="react">
+    <Payments client:only="react" />
+  </AppShell>
+</PortalLayout>

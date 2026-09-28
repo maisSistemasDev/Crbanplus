@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api, API_URL } from '../../../../lib/api/client';
 import { ENDPOINTS } from '../../../../lib/api/endpoints';
 import { Modal } from '../../ui/Modal';
-import { Download, CreditCard } from 'lucide-react';
+import { Download, CreditCard, Undo2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { extractErrorMessage } from '../../../../lib/api/errors';
 
@@ -11,27 +11,54 @@ interface ReleaseModalProps {
   onClose: () => void;
   selectedIds: number[];
   selectedCommissions: Array<{ id: number; release_status?: string }>;
+  /** Estado inicial da flag de consolidação, herdado da tela de comissões. */
+  defaultConsolidated?: boolean;
   onSuccess: () => void;
 }
 
-export function ReleaseModal({ isOpen, onClose, selectedIds, selectedCommissions, onSuccess }: ReleaseModalProps) {
+export function ReleaseModal({
+  isOpen,
+  onClose,
+  selectedIds,
+  selectedCommissions,
+  defaultConsolidated = false,
+  onSuccess,
+}: ReleaseModalProps) {
   const [releasing, setReleasing] = useState(false);
   const [downloadingExcel, setDownloadingExcel] = useState(false);
+  const [consolidated, setConsolidated] = useState(defaultConsolidated);
+
+  useEffect(() => {
+    if (isOpen) setConsolidated(defaultConsolidated);
+  }, [isOpen, defaultConsolidated]);
 
   // Verificar se há comissões aguardando pagamento selecionadas
   const hasPendingPayment = selectedCommissions.some(
     comm => comm.release_status === 'pending_manual_payment'
   );
+  const hasPaid = selectedCommissions.some(
+    comm => comm.release_status === 'paid'
+  );
+  const canCancelPayment = hasPendingPayment || hasPaid;
 
-  async function handleUpdateStatus(newStatus: 'withdraw_available' | 'paid') {
+  async function handleUpdateStatus(newStatus: 'withdraw_available' | 'paid' | 'not_released') {
     setReleasing(true);
     try {
       await api.post(ENDPOINTS.COMMISSION_UPDATE_STATUS, {
         commission_ids: selectedIds,
         new_status: newStatus,
       });
-      const statusLabel = newStatus === 'withdraw_available' ? 'saque liberado' : 'pago';
-      toast.success(`Comissões atualizadas para '${statusLabel}' com sucesso!`);
+      const statusLabel =
+        newStatus === 'withdraw_available'
+          ? 'saque liberado'
+          : newStatus === 'paid'
+            ? 'pago'
+            : 'não liberado';
+      toast.success(
+        newStatus === 'not_released'
+          ? 'Pagamento cancelado. Comissões voltaram para Não liberado.'
+          : `Comissões atualizadas para '${statusLabel}' com sucesso!`,
+      );
       onSuccess();
       onClose();
     } catch (error) {
@@ -50,7 +77,7 @@ export function ReleaseModal({ isOpen, onClose, selectedIds, selectedCommissions
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${JSON.parse(localStorage.getItem('tokens') || '{}').access}`,
         },
-        body: JSON.stringify({ commission_ids: selectedIds }),
+        body: JSON.stringify({ commission_ids: selectedIds, consolidated }),
       });
 
       if (!response.ok) throw new Error('Erro ao gerar Excel');
@@ -111,16 +138,33 @@ export function ReleaseModal({ isOpen, onClose, selectedIds, selectedCommissions
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={hasPendingPayment ? "Gerenciar Comissões" : "Liberar Comissões"}>
+    <Modal isOpen={isOpen} onClose={onClose} title={hasPendingPayment || hasPaid ? "Gerenciar Comissões" : "Liberar Comissões"}>
       <div className="space-y-4">
         <p className="text-sm text-gray-600">
           Você selecionou <strong>{selectedIds.length}</strong> comissão(ões).{' '}
-          {hasPendingPayment ? 'Escolha uma ação:' : 'Escolha como deseja liberar:'}
+          {hasPendingPayment || hasPaid ? 'Escolha uma ação:' : 'Escolha como deseja liberar:'}
         </p>
 
-        {hasPendingPayment ? (
-          // Opções para comissões aguardando pagamento
+        <label className="flex items-start gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm">
+          <input
+            type="checkbox"
+            checked={consolidated}
+            onChange={(e) => setConsolidated(e.target.checked)}
+            className="mt-0.5"
+          />
+          <span>
+            <span className="font-medium text-gray-800">Relatório consolidado</span>
+            <span className="block text-xs text-gray-500">
+              Soma tudo por recebedor. Sem consolidar, o Excel traz uma linha por proposta com CPF e
+              nome do cliente, banco, tabela e porcentagem.
+            </span>
+          </span>
+        </label>
+
+        {hasPendingPayment || hasPaid ? (
           <div className="grid grid-cols-1 gap-3">
+            {hasPendingPayment && (
+              <>
             <button
               onClick={handleDownloadExcel}
               disabled={releasing || downloadingExcel}
@@ -168,6 +212,26 @@ export function ReleaseModal({ isOpen, onClose, selectedIds, selectedCommissions
                 </p>
               </div>
             </button>
+              </>
+            )}
+
+            {canCancelPayment && (
+            <button
+              onClick={() => handleUpdateStatus('not_released')}
+              disabled={releasing || downloadingExcel}
+              className="flex items-center gap-3 p-4 border-2 border-red-200 rounded-lg hover:border-red-400 hover:bg-red-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <div className="flex-shrink-0 w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                <Undo2 size={20} className="text-red-600" />
+              </div>
+              <div className="flex-1 text-left">
+                <h3 className="font-semibold text-gray-900">Cancelar pagamento</h3>
+                <p className="text-xs text-gray-500">
+                  Volta o status para Não liberado
+                </p>
+              </div>
+            </button>
+            )}
           </div>
         ) : (
           // Opções para comissões não liberadas

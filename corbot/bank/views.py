@@ -3,6 +3,9 @@ from rest_framework import status, permissions
 import logging
 from django.shortcuts import get_object_or_404
 from django.http import HttpResponse
+from django.core.paginator import Paginator
+from django.db.models import Q
+from django.utils import timezone
 import csv
 import io
 from datetime import datetime
@@ -283,6 +286,10 @@ class AgreementListCreateView(BaseApiView):
         Lista os convênios.
         """
         agreements = Agreement.objects.all()
+        bank_id = request.query_params.get('bank')
+        if bank_id:
+            # Só convênios que realmente têm tabela naquele banco.
+            agreements = agreements.filter(tables__bank_id=bank_id).distinct()
         serializer = AgreementSerializer(agreements, many=True)
         
         # Registra a ação usando o método da classe base
@@ -522,63 +529,82 @@ class TableListCreateView(BaseApiView):
 
     def get(self, request, format=None):
         """
-        Lista as tabelas.
+        Lista as tabelas com filtros e paginação.
         """
-        tables = Table.objects.all()
+        tables = Table.objects.select_related('bank', 'agreement').prefetch_related('commission_ranges').all()
+
+        # Filtros por query params
+        bank_id = request.query_params.get('bank')
+        agreement_id = request.query_params.get('agreement')
+        table_id = request.query_params.get('table')
+        code_in_bank = request.query_params.get('code_in_bank')
+        search = request.query_params.get('search')
+
+        if bank_id:
+            tables = tables.filter(bank_id=bank_id)
+        if agreement_id:
+            tables = tables.filter(agreement_id=agreement_id)
+        if table_id:
+            tables = tables.filter(id=table_id)
+        if code_in_bank:
+            tables = tables.filter(code_in_bank__icontains=code_in_bank)
+        if search:
+            tables = tables.filter(
+                Q(name_in_bank__icontains=search) | Q(code_in_bank__icontains=search)
+            )
+
+        # Paginação
+        try:
+            page_size = min(max(int(request.query_params.get('page_size', 25)), 1), 500)
+        except (TypeError, ValueError):
+            page_size = 25
+        page_number = request.query_params.get('page', 1)
+        paginator = Paginator(tables, page_size)
+        page_obj = paginator.get_page(page_number)
 
         if request.user.role == User.ADMIN:
-            serializer = TableSerializer(tables, many=True)
-            
+            serializer = TableSerializer(page_obj.object_list, many=True)
+            tables_data = list(serializer.data)
+
             self.log_info(
                 request=request,
                 action='list_tables',
-                message=f'Usuário admin listou {tables.count()} tabelas'
+                message=f'Usuário admin listou {paginator.count} tabelas'
             )
-            
-            return Response(serializer.data)
         else:
             # Buscar o grupo de comissionamento da empresa do usuário
             commission_group = CommissionGroupByCompany.objects.filter(
                 companies__id=request.user.company.id
             ).first()
-            
-            if not commission_group:
-                # Se não há grupo de comissionamento, retorna todas as tabelas sem taxa específica
-                serializer = TableSerializer(tables, many=True)
-                return Response(serializer.data)
-            
-            # Buscar as regras de comissão do grupo
-            commission_rules = commission_group.comission_rules.all()
-            
-            # Criar um dicionário para mapear table_id -> commission_rate
+
             table_commission_rates = {}
-            for rule in commission_rules:
-                logger.debug(rule)
-                if rule.table:
-                    logger.debug(rule.table)
-                    table_commission_rates[str(rule.table.id)] = rule.commission_rate
-                    logger.debug(table_commission_rates)
-            # Serializar todas as tabelas
-            serializer = TableSerializer(tables, many=True)
-            tables_data = serializer.data
-            
-            # Adicionar ou atualizar o commission_rate baseado nas regras do grupo
+            if commission_group:
+                for rule in commission_group.comission_rules.all():
+                    logger.debug(rule)
+                    if rule.table:
+                        table_commission_rates[str(rule.table.id)] = rule.commission_rate
+
+            serializer = TableSerializer(page_obj.object_list, many=True)
+            tables_data = list(serializer.data)
+
             for table_data in tables_data:
                 table_id = table_data['id']
-                logger.debug(table_id)
                 value = table_commission_rates.get(table_id)
-                logger.debug(value)
                 if value:
                     table_data['commission_rate'] = float(value)
-                # Se não há regra específica, mantém o commission_rate original da tabela
-            
+
             self.log_info(
                 request=request,
                 action='list_tables',
-                message=f'Usuário listou {tables.count()} tabelas com taxas de comissionamento do grupo'
+                message=f'Usuário listou tabelas com taxas de comissionamento do grupo'
             )
-            
-            return Response(tables_data)
+
+        return Response({
+            'count': paginator.count,
+            'next': None,
+            'previous': None,
+            'results': tables_data,
+        })
     
     def post(self, request, format=None):
         """
@@ -605,6 +631,179 @@ class TableListCreateView(BaseApiView):
             
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+def _partner_rate_index(user):
+    """Índice (table_id, range_id) -> (taxa, valor fixo) das regras do parceiro."""
+    index = {}
+    role = getattr(user, 'role', None)
+    company_id = getattr(user, 'company_id', None)
+
+    if role in (User.EMPRESA_ADMIN, User.GERENTE, User.ADMIN) and company_id:
+        group = (
+            CommissionGroupByCompany.objects.filter(companies__id=company_id, is_active=True)
+            .prefetch_related('comission_rules')
+            .first()
+        )
+        if group:
+            for rule in group.comission_rules.all():
+                key = (
+                    str(rule.table_id) if rule.table_id else None,
+                    str(rule.commission_range_id) if rule.commission_range_id else None,
+                )
+                index[key] = (rule.commission_rate, rule.fixed_value)
+
+    if role == User.VENDEDOR:
+        group = (
+            CommissionGroup.objects.filter(sellers=user, is_active=True)
+            .prefetch_related('commission_rules')
+            .first()
+        )
+        if group:
+            for rule in group.commission_rules.all():
+                key = (
+                    str(rule.table_id) if rule.table_id else None,
+                    str(rule.commission_range_id) if rule.commission_range_id else None,
+                )
+                index[key] = (rule.seller_commission_rate, None)
+
+    if role == User.LIDER:
+        group = (
+            CommissionGroup.objects.filter(Q(leaders=user) | Q(leader=user), is_active=True)
+            .prefetch_related('commission_rules')
+            .first()
+        )
+        if group:
+            for rule in group.commission_rules.all():
+                key = (
+                    str(rule.table_id) if rule.table_id else None,
+                    str(rule.commission_range_id) if rule.commission_range_id else None,
+                )
+                index[key] = (rule.leader_commission_rate, None)
+
+    return index
+
+
+def _lookup_partner_rate(index, table_id, range_id, fallback_rate, fallback_fixed):
+    for key in ((table_id, range_id), (table_id, None)):
+        if key in index:
+            return index[key]
+    return fallback_rate, fallback_fixed
+
+
+class TableCatalogView(BaseApiView):
+    """Catálogo de tabelas vigentes para o parceiro consultar comissões."""
+
+    permission_classes = [permissions.IsAuthenticated]
+    MAX_ROWS = 5000
+
+    def get(self, request, format=None):
+        today = timezone.now().date()
+        tables = (
+            Table.objects.filter(is_active=True, vigency_date__lte=today)
+            .select_related('bank', 'agreement')
+            .prefetch_related('commission_ranges')
+            .order_by('bank__name', 'agreement__name', 'name_in_bank', 'vigency_date')
+        )
+
+        bank_id = request.query_params.get('bank')
+        agreement_id = request.query_params.get('agreement')
+        table_id = request.query_params.get('table')
+        if bank_id:
+            tables = tables.filter(bank_id=bank_id)
+        if agreement_id:
+            tables = tables.filter(agreement_id=agreement_id)
+        if table_id:
+            tables = tables.filter(id=table_id)
+
+        sort = request.query_params.get('sort') or 'range'
+        rate_index = _partner_rate_index(request.user)
+
+        rows = []
+        for table in tables:
+            ranges = list(table.commission_ranges.all())
+            if not ranges:
+                rate, fixed = _lookup_partner_rate(
+                    rate_index, str(table.id), None, table.commission_rate, None
+                )
+                rows.append(self._row(table, None, table.min_value, table.max_value, rate, fixed))
+                continue
+
+            emitted = False
+            for item in ranges:
+                empty_wildcard = (
+                    float(item.min_value or 0) == 0
+                    and float(item.max_value or 0) == 0
+                    and item.fixed_value is None
+                    and float(item.commission_rate or 0) == 0
+                )
+                if empty_wildcard:
+                    continue
+                rate, fixed = _lookup_partner_rate(
+                    rate_index,
+                    str(table.id),
+                    str(item.id),
+                    item.commission_rate,
+                    item.fixed_value,
+                )
+                rows.append(self._row(table, str(item.id), item.min_value, item.max_value, rate, fixed))
+                emitted = True
+            if not emitted:
+                rate, fixed = _lookup_partner_rate(
+                    rate_index, str(table.id), None, table.commission_rate, None
+                )
+                rows.append(self._row(table, None, table.min_value, table.max_value, rate, fixed))
+
+        if sort == 'commission':
+            rows.sort(
+                key=lambda row: (
+                    -(float(row['commission_rate'] or 0)),
+                    -(float(row['fixed_value'] or 0)),
+                    row['bank_name'],
+                    row['agreement_name'],
+                    row['product'],
+                    float(row['min_value'] or 0),
+                )
+            )
+        else:
+            rows.sort(
+                key=lambda row: (
+                    row['bank_name'],
+                    row['agreement_name'],
+                    row['product'],
+                    float(row['min_value'] or 0),
+                    float(row['max_value'] or 0),
+                )
+            )
+
+        truncated = len(rows) > self.MAX_ROWS
+        rows = rows[: self.MAX_ROWS]
+
+        self.log_info(
+            request=request,
+            action='catalog_tables',
+            message=f'Usuário consultou catálogo de {len(rows)} faixas de comissão',
+        )
+        return Response({'count': len(rows), 'truncated': truncated, 'results': rows})
+
+    @staticmethod
+    def _row(table, range_id, min_value, max_value, rate, fixed):
+        return {
+            'table_id': str(table.id),
+            'range_id': range_id,
+            'bank_id': str(table.bank_id),
+            'bank_name': table.bank.name if table.bank_id else '',
+            'agreement_id': str(table.agreement_id),
+            'agreement_name': table.agreement.name if table.agreement_id else '',
+            'product': table.name_in_bank or table.code_in_bank or '',
+            'min_value': str(min_value if min_value is not None else 0),
+            'max_value': str(max_value if max_value is not None else 0),
+            'commission_rate': str(rate if rate is not None else 0),
+            'fixed_value': str(fixed) if fixed is not None else None,
+            'vigency_date': table.vigency_date.isoformat() if table.vigency_date else None,
+            'format': 'Digital',
+            'product_type': 'Novo',
+        }
 
 
 class TableDetailView(BaseApiView):
@@ -752,17 +951,22 @@ class TableCreateBatchView(BaseApiView):
 
         file = request.FILES.get('file')
         bank_id = request.data.get('bank_id')
+        # Sem bank_id: modo "Do Arquivo" - 1ª coluna do CSV é o nome do banco
+        multi_bank = not bank_id
 
         if not file:
             return Response({"detail": "Arquivo não encontrado."}, status=status.HTTP_400_BAD_REQUEST)
-        if not bank_id:
-            return Response({"detail": "ID do banco não informado."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            try:
-                bank = Bank.objects.get(id=bank_id)
-            except ObjectDoesNotExist:
-                return Response({"detail": "Banco não encontrado."}, status=status.HTTP_404_NOT_FOUND)
+            bank = None
+            banks_by_norm_name = {}
+            if multi_bank:
+                banks_by_norm_name = {normalize_name(b.name): b for b in Bank.objects.all()}
+            else:
+                try:
+                    bank = Bank.objects.get(id=bank_id)
+                except ObjectDoesNotExist:
+                    return Response({"detail": "Banco não encontrado."}, status=status.HTTP_404_NOT_FOUND)
 
             file_data = file.read().decode('utf-8')
             io_string = io.StringIO(file_data)
@@ -771,42 +975,62 @@ class TableCreateBatchView(BaseApiView):
             errors = []
             line_number = 0
             table_groups = OrderedDict()
+            offset = 1 if multi_bank else 0
+            min_cols = 7 if multi_bank else 6
 
-            # --- Passo 1: ler todas as linhas e agrupar por tabela ---
+            # --- Passo 1: ler todas as linhas e agrupar por tabela (e banco, no modo "Do Arquivo") ---
             for row in reader:
                 line_number += 1
 
                 if line_number == 1 and row and any(
-                    h in row[0].lower() for h in ['nome_no_banco', 'convenio', 'tabela', 'nome']
+                    h in row[0].lower() for h in ['nome_no_banco', 'convenio', 'tabela', 'nome', 'banco']
                 ):
                     continue
 
-                if len(row) < 6:
-                    errors.append(f"Linha {line_number}: Dados insuficientes (esperado 6 campos, encontrado {len(row)})")
+                if len(row) < min_cols:
+                    errors.append(f"Linha {line_number}: Dados insuficientes (esperado {min_cols} campos, encontrado {len(row)})")
                     continue
 
-                table_name_norm = normalize_name(row[0].strip())
-                agreement_name_norm = normalize_name(row[1].strip())
+                row_bank = bank
+                if multi_bank:
+                    bank_name_raw = row[0].strip()
+                    row_bank = banks_by_norm_name.get(normalize_name(bank_name_raw))
+                    if row_bank is None:
+                        errors.append(f"Linha {line_number}: Banco '{bank_name_raw}' não encontrado")
+                        continue
+
+                table_name_norm = normalize_name(row[0 + offset].strip())
+                agreement_name_norm = normalize_name(row[1 + offset].strip())
 
                 if not table_name_norm or not agreement_name_norm:
                     errors.append(f"Linha {line_number}: Nome da tabela ou convênio vazio")
                     continue
 
                 try:
-                    min_value = float(row[2].strip().replace(',', '.')) if row[2].strip() else None
-                    max_value = float(row[3].strip().replace(',', '.')) if row[3].strip() else None
-                    commission_rate = float(row[4].strip().replace(',', '.')) if row[4].strip() else None
+                    min_value = float(row[2 + offset].strip().replace(',', '.')) if row[2 + offset].strip() else None
+                    max_value = float(row[3 + offset].strip().replace(',', '.')) if row[3 + offset].strip() else None
+                    commission_rate = float(row[4 + offset].strip().replace(',', '.')) if row[4 + offset].strip() else None
+                    fixed_value = None
+                    extra_idx = 6 + offset
+                    if len(row) > extra_idx and row[extra_idx].strip():
+                        fixed_value = float(row[extra_idx].strip().replace(',', '.'))
+                    if commission_rate is not None and commission_rate > 100 and fixed_value is None:
+                        fixed_value = commission_rate
+                        commission_rate = 0
                 except ValueError as e:
                     errors.append(f"Linha {line_number}: Valores numéricos inválidos - {str(e)}")
                     continue
 
-                if min_value is None or max_value is None or commission_rate is None:
-                    errors.append(f"Linha {line_number}: Valores numéricos obrigatórios (min, max, taxa)")
+                if min_value is None or max_value is None:
+                    errors.append(f"Linha {line_number}: Valores numéricos obrigatórios (min, max)")
+                    continue
+                if commission_rate is None and fixed_value is None:
+                    errors.append(f"Linha {line_number}: Informe taxa (%) ou valor fixo (R$)")
                     continue
 
                 vigency_date = None
-                if row[5].strip():
-                    date_str = row[5].strip()
+                if row[5 + offset].strip():
+                    date_str = row[5 + offset].strip()
                     for fmt in ['%Y-%m-%d', '%d/%m/%Y', '%d-%m-%Y']:
                         try:
                             vigency_date = datetime.strptime(date_str, fmt).date()
@@ -814,12 +1038,13 @@ class TableCreateBatchView(BaseApiView):
                         except ValueError:
                             continue
                     if vigency_date is None:
-                        errors.append(f"Linha {line_number}: Formato de data inválido '{row[5]}'. Use YYYY-MM-DD, DD/MM/YYYY ou DD-MM-YYYY")
+                        errors.append(f"Linha {line_number}: Formato de data inválido '{row[5 + offset]}'. Use YYYY-MM-DD, DD/MM/YYYY ou DD-MM-YYYY")
                         continue
 
-                key = (table_name_norm, agreement_name_norm, str(vigency_date))
+                key = (str(row_bank.id), table_name_norm, agreement_name_norm, str(vigency_date))
                 if key not in table_groups:
                     table_groups[key] = {
+                        'bank': row_bank,
                         'table_name_norm': table_name_norm,
                         'agreement_name_norm': agreement_name_norm,
                         'vigency_date': vigency_date,
@@ -829,23 +1054,35 @@ class TableCreateBatchView(BaseApiView):
                 table_groups[key]['ranges'].append({
                     'min_value': min_value,
                     'max_value': max_value,
-                    'commission_rate': commission_rate,
+                    'commission_rate': commission_rate if commission_rate is not None else 0,
+                    'fixed_value': fixed_value,
                 })
 
             # --- Passo 2: criar/atualizar cada tabela com suas faixas ---
             created_tables = []
             updated_tables = []
 
+            # Normaliza convênios uma única vez por nome para evitar duplicatas
+            # durante o processamento do arquivo.
+            agreement_by_norm: dict[str, Agreement] = {}
+            all_agreements = Agreement.objects.prefetch_related('banks')
+            for agr in all_agreements:
+                norm = normalize_name(agr.name)
+                if norm and norm not in agreement_by_norm:
+                    agreement_by_norm[norm] = agr
+
             for key, group in table_groups.items():
+                bank = group['bank']
                 try:
-                    agreement = Agreement.objects.filter(
-                        banks=bank
-                    ).filter(
-                        name__iexact=group['agreement_name_norm']
-                    ).first()
+                    norm = group['agreement_name_norm']
+                    agreement = agreement_by_norm.get(norm)
 
                     if not agreement:
-                        agreement = Agreement.objects.create(name=group['agreement_name_norm'])
+                        agreement = Agreement.objects.create(name=norm)
+                        agreement_by_norm[norm] = agreement
+
+                    # Garante que o banco esteja relacionado ao convênio
+                    if not agreement.banks.filter(pk=bank.pk).exists():
                         agreement.banks.add(bank)
 
                     existing_table = Table.objects.filter(
@@ -856,7 +1093,9 @@ class TableCreateBatchView(BaseApiView):
 
                     if existing_table:
                         old_ranges = list(
-                            existing_table.commission_ranges.values('min_value', 'max_value', 'commission_rate')
+                            existing_table.commission_ranges.values(
+                                'min_value', 'max_value', 'commission_rate', 'fixed_value',
+                            )
                         )
 
                         if group['vigency_date']:
@@ -870,6 +1109,7 @@ class TableCreateBatchView(BaseApiView):
                                 min_value=r['min_value'],
                                 max_value=r['max_value'],
                                 commission_rate=r['commission_rate'],
+                                fixed_value=r.get('fixed_value'),
                             )
 
                         TableHistory.objects.create(
@@ -880,7 +1120,12 @@ class TableCreateBatchView(BaseApiView):
                                 {k: str(v) for k, v in r.items()} for r in old_ranges
                             ]},
                             new_values={'commission_ranges': [
-                                {'min_value': str(r['min_value']), 'max_value': str(r['max_value']), 'commission_rate': str(r['commission_rate'])}
+                                {
+                                    'min_value': str(r['min_value']),
+                                    'max_value': str(r['max_value']),
+                                    'commission_rate': str(r['commission_rate']),
+                                    'fixed_value': str(r['fixed_value']) if r.get('fixed_value') is not None else None,
+                                }
                                 for r in group['ranges']
                             ]},
                             notes=f'Atualização via CSV - {len(group["ranges"])} faixa(s)',
@@ -912,6 +1157,7 @@ class TableCreateBatchView(BaseApiView):
                                 min_value=r['min_value'],
                                 max_value=r['max_value'],
                                 commission_rate=r['commission_rate'],
+                                fixed_value=r.get('fixed_value'),
                             )
 
                         TableHistory.objects.create(
@@ -919,7 +1165,12 @@ class TableCreateBatchView(BaseApiView):
                             action='CSV_IMPORT',
                             user=request.user if request.user.is_authenticated else None,
                             new_values={'commission_ranges': [
-                                {'min_value': str(r['min_value']), 'max_value': str(r['max_value']), 'commission_rate': str(r['commission_rate'])}
+                                {
+                                    'min_value': str(r['min_value']),
+                                    'max_value': str(r['max_value']),
+                                    'commission_rate': str(r['commission_rate']),
+                                    'fixed_value': str(r['fixed_value']) if r.get('fixed_value') is not None else None,
+                                }
                                 for r in group['ranges']
                             ]},
                             notes=f'Criação via CSV - {len(group["ranges"])} faixa(s)',
@@ -981,21 +1232,37 @@ class TableCreateBatchView(BaseApiView):
             )
 
     def get(self, request, format=None):
-        """Retorna um arquivo CSV de exemplo com múltiplas faixas de comissionamento por tabela"""
+        """Retorna um arquivo CSV de exemplo com múltiplas faixas de comissionamento por tabela.
+
+        Com ?multi_bank=1, inclui a coluna "banco" (1ª coluna) para importar tabelas
+        de vários bancos de uma vez (opção "Do Arquivo").
+        """
+        multi_bank = request.query_params.get('multi_bank') in ('1', 'true', 'True')
+
         response = HttpResponse(content_type='text/csv; charset=utf-8')
-        response['Content-Disposition'] = 'attachment; filename="exemplo_tabelas.csv"'
+        filename = 'exemplo_tabelas_multi_banco.csv' if multi_bank else 'exemplo_tabelas.csv'
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
         response.write('\ufeff')
         writer = csv.writer(response, delimiter=';')
-        writer.writerow([
-            'nome_no_banco', 'convenio', 'valor_minimo', 'valor_maximo',
-            'taxa_de_comissionamento', 'data_de_vigencia',
-        ])
-        # Exemplo: mesma tabela com 3 faixas
-        writer.writerow(['INSS Proposta', 'INSS', '50', '1000', '25', '2026-01-01'])
-        writer.writerow(['INSS Proposta', 'INSS', '1000.01', '5000', '23', '2026-01-01'])
-        writer.writerow(['INSS Proposta', 'INSS', '5000.01', '10000', '20', '2026-01-01'])
-        # Outra tabela com 1 faixa
-        writer.writerow(['FGTS Tabela', 'FGTS', '500', '10000', '18', '2026-01-01'])
+
+        header = ['nome_no_banco', 'convenio', 'valor_minimo', 'valor_maximo',
+                  'taxa_de_comissionamento', 'data_de_vigencia', 'valor_fixo']
+        rows = [
+            ['INSS Proposta', 'INSS', '50', '1000', '25', '2026-01-01', ''],
+            ['INSS Proposta', 'INSS', '1000.01', '5000', '23', '2026-01-01', ''],
+            ['INSS Proposta', 'INSS', '5000.01', '10000', '20', '2026-01-01', ''],
+            ['FGTS Tabela', 'FGTS', '500', '10000', '18', '2026-01-01', ''],
+            ['FGTS FIXO', 'FGTS', '0', '0', '', '2026-01-01', '960'],
+        ]
+
+        if multi_bank:
+            header = ['banco'] + header
+            bank_names = ['Banco Exemplo A', 'Banco Exemplo A', 'Banco Exemplo A', 'Banco Exemplo B', 'Banco Exemplo B']
+            rows = [[bank_name] + row for bank_name, row in zip(bank_names, rows)]
+
+        writer.writerow(header)
+        for row in rows:
+            writer.writerow(row)
         return response
 
 
@@ -1040,7 +1307,8 @@ class TableExportCSVView(BaseApiView):
                 'valor_minimo',
                 'valor_maximo',
                 'taxa_de_comissionamento',
-                'data_de_vigencia'
+                'data_de_vigencia',
+                'valor_fixo',
             ])
             
             # Dados: uma linha por faixa de comissionamento
@@ -1053,8 +1321,9 @@ class TableExportCSVView(BaseApiView):
                             table.agreement.name or '',
                             str(cr.min_value),
                             str(cr.max_value),
-                            str(cr.commission_rate),
+                            str(cr.commission_rate) if cr.commission_rate is not None else '',
                             table.vigency_date.strftime('%Y-%m-%d') if table.vigency_date else '',
+                            str(cr.fixed_value) if cr.fixed_value is not None else '',
                         ])
                 else:
                     # Tabela sem faixas: exporta linha vazia para não perdê-la
@@ -1063,6 +1332,7 @@ class TableExportCSVView(BaseApiView):
                         table.agreement.name or '',
                         '', '', '',
                         table.vigency_date.strftime('%Y-%m-%d') if table.vigency_date else '',
+                        '',
                     ])
             
             # Registrar ação
@@ -1209,6 +1479,32 @@ class TableBulkDeleteView(BaseApiView):
             request=request,
             action='bulk_delete_tables',
             message=f'Usuário excluiu {deleted_count} tabela(s) em massa.',
+            data={'ids': ids, 'deleted_count': deleted_count}
+        )
+
+        return Response({"deleted": deleted_count}, status=status.HTTP_200_OK)
+
+
+class AgreementBulkDeleteView(BaseApiView):
+    """
+    API endpoint para exclusão em massa de convênios.
+    Recebe uma lista de IDs via body: {"ids": ["uuid1", "uuid2", ...]}
+    """
+    permission_classes = [IsAdmin]
+
+    def delete(self, request, format=None):
+        ids = request.data.get('ids', [])
+        if not ids or not isinstance(ids, list):
+            return Response({"detail": "Forneça uma lista de IDs em 'ids'."}, status=status.HTTP_400_BAD_REQUEST)
+
+        agreements = Agreement.objects.filter(id__in=ids)
+        deleted_count = agreements.count()
+        agreements.delete()
+
+        self.log_info(
+            request=request,
+            action='bulk_delete_agreements',
+            message=f'Usuário excluiu {deleted_count} convênio(s) em massa.',
             data={'ids': ids, 'deleted_count': deleted_count}
         )
 

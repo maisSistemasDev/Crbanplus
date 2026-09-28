@@ -2,79 +2,80 @@ import { useStore } from '@nanostores/react';
 import { $currentUser } from '../../../../lib/stores/auth';
 import { ROLE_LABELS } from '../../../../lib/utils/roles';
 import type { Role } from '../../../../lib/utils/roles';
-import { FileSpreadsheet, Coins, CreditCard, Users } from 'lucide-react';
+import {
+  FileSpreadsheet, Coins, UsersRound, Upload, Settings, Landmark, Users,
+} from 'lucide-react';
+import { CommercialProductionPage } from '../commercial/CommercialProductionPage';
+import { PageHeader } from '../../ui/PageHeader';
 
-function StatCard({
-  icon,
+const SHORTCUTS = [
+  { href: '/proposals/batches/upload', label: 'Upload de lote', icon: Upload, roles: ['admin', 'empresa_admin', 'gerente', 'lider'] as Role[] },
+  { href: '/commissions', label: 'Comissões', icon: Coins, roles: ['admin', 'empresa_admin', 'gerente', 'lider', 'vendedor'] as Role[] },
+  { href: '/commission-groups', label: 'Equipes', icon: UsersRound, roles: ['admin', 'empresa_admin', 'gerente'] as Role[] },
+  { href: '/users/import', label: 'Importar CSV', icon: Users, roles: ['admin', 'empresa_admin'] as Role[] },
+  { href: '/tables', label: 'Tabelas bancárias', icon: Landmark, roles: ['admin', 'empresa_admin', 'gerente'] as Role[] },
+  { href: '/proposals', label: 'Propostas', icon: FileSpreadsheet, roles: ['admin', 'empresa_admin', 'gerente', 'lider', 'vendedor'] as Role[] },
+  { href: '/settings', label: 'Configurações', icon: Settings, roles: ['admin', 'empresa_admin'] as Role[] },
+];
+
+function ShortcutCard({
+  href,
   label,
-  value,
-  color,
+  icon: Icon,
 }: {
-  icon: React.ReactNode;
+  href: string;
   label: string;
-  value: string;
-  color: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
 }) {
   return (
-    <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
-      <div className="flex items-center gap-4">
-        <div
-          className="h-12 w-12 rounded-lg flex items-center justify-center shrink-0"
-          style={{ backgroundColor: `${color}15`, color }}
-        >
-          {icon}
-        </div>
-        <div>
-          <p className="text-sm text-gray-500">{label}</p>
-          <p className="text-2xl font-bold text-gray-900">{value}</p>
-        </div>
+    <a
+      href={href}
+      className="card flex items-center gap-3 hover:border-[var(--color-primary)]/40 hover:shadow-md transition-all group"
+    >
+      <div
+        className="h-9 w-9 rounded-lg flex items-center justify-center shrink-0"
+        style={{ backgroundColor: 'color-mix(in srgb, var(--color-primary) 12%, white)', color: 'var(--color-primary)' }}
+      >
+        <Icon size={18} />
       </div>
-    </div>
+      <span className="text-sm font-medium text-gray-800 group-hover:text-[var(--color-primary)]">
+        {label}
+      </span>
+    </a>
   );
 }
 
 export function DashboardOverview() {
   const user = useStore($currentUser);
+  const role = (user?.role || 'vendedor') as Role;
+
+  if (role === 'gerente_comercial') {
+    return <CommercialProductionPage />;
+  }
+
+  const shortcuts = SHORTCUTS.filter((s) => s.roles.includes(role));
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Bem-vindo, {user?.first_name}! ({ROLE_LABELS[(user?.role || 'vendedor') as Role]})
+      <PageHeader
+        title="Dashboard"
+        subtitle={`Bem-vindo, ${user?.first_name}! (${ROLE_LABELS[role]})`}
+      />
+
+      <div className="mb-4">
+        <h2 className="text-sm font-semibold text-gray-700 mb-2">Acesso rápido</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {shortcuts.map((s) => (
+            <ShortcutCard key={s.href} href={s.href} label={s.label} icon={s.icon} />
+          ))}
+        </div>
+      </div>
+
+      <div className="card">
+        <h2 className="text-sm font-semibold text-gray-900 mb-1">Indicadores</h2>
+        <p className="text-xs text-gray-500">
+          Resumo numérico em breve. Use os atalhos acima para as tarefas do dia a dia.
         </p>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <StatCard
-          icon={<FileSpreadsheet size={24} />}
-          label="Propostas"
-          value="--"
-          color="var(--color-primary)"
-        />
-        <StatCard
-          icon={<Coins size={24} />}
-          label="Comissoes Pendentes"
-          value="--"
-          color="var(--color-warning)"
-        />
-        <StatCard
-          icon={<CreditCard size={24} />}
-          label="Pagamentos"
-          value="--"
-          color="var(--color-success)"
-        />
-        <StatCard
-          icon={<Users size={24} />}
-          label="Vendedores Ativos"
-          value="--"
-          color="var(--color-accent)"
-        />
-      </div>
-
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Atividade Recente</h2>
-        <p className="text-sm text-gray-500">Nenhuma atividade recente.</p>
       </div>
     </div>
   );

@@ -1,0 +1,10 @@
+---
+import PortalLayout from '../../layouts/PortalLayout.astro';
+import { AppShell } from '../../components/react/layout/AppShell';
+import { BankAccesses } from '../../components/react/domain/bank-access/BankAccesses';
+---
+<PortalLayout title="Acessos bancários - Portal Corban">
+  <AppShell client:only="react">
+    <BankAccesses client:only="react" />
+  </AppShell>
+</PortalLayout>

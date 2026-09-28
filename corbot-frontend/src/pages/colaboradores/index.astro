@@ -1,0 +1,8 @@
+---
+import DashboardLayout from '@/layouts/DashboardLayout.astro';
+import { InternalUserListPage } from '@/components/react/domain/internal-users/InternalUserPages';
+---
+
+<DashboardLayout title="Colaboradores - CorbanPlus">
+  <InternalUserListPage client:only="react" />
+</DashboardLayout>

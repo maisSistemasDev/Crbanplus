@@ -9,6 +9,15 @@ import { $tokens, clearAuth } from '../stores/auth';
 export const API_BASE_URL =
   (import.meta.env.PUBLIC_API_URL as string | undefined)?.replace(/\/+$/, '') ?? '';
 
+/** Resolve URL de mídia/arquivo retornada pela API (ex.: /media/bank_logos/x.png). */
+export function resolveMediaUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  if (/^(https?:|blob:|data:)/.test(url)) return url;
+  const path = url.startsWith('/') ? url : `/${url}`;
+  if (API_BASE_URL) return `${API_BASE_URL}${path}`;
+  return path;
+}
+
 export const API_URL = `${API_BASE_URL}/api`;
 
 const API_BASE = API_URL;
@@ -61,7 +70,7 @@ function processRefreshQueue(token: string | null, error: unknown) {
   refreshQueue = [];
 }
 
-async function refreshAccessToken(): Promise<string | null> {
+export async function refreshAccessToken(): Promise<string | null> {
   const tokens = $tokens.get();
   if (!tokens?.refresh) return null;
 

@@ -1,6 +1,4 @@
-import { useStore } from '@nanostores/react';
-import { $currentUser } from '../../../lib/stores/auth';
-import { LayoutDashboard, Coins, Wallet, Settings } from 'lucide-react';
+import { Coins, CreditCard, Landmark, Receipt } from 'lucide-react';
 import clsx from 'clsx';
 
 interface NavItem {
@@ -10,10 +8,10 @@ interface NavItem {
 }
 
 const BASE_NAV: NavItem[] = [
-  { icon: <LayoutDashboard size={22} />, label: 'Início',    href: '/dashboard' },
-  { icon: <Coins size={22} />,           label: 'Comissões', href: '/commissions' },
-  { icon: <Wallet size={22} />,          label: 'Saques',    href: '/withdrawals/corbanpay' },
-  { icon: <Settings size={22} />,        label: 'Config',    href: '/settings' },
+  { icon: <Landmark size={22} />,   label: 'Corbans',    href: '/users' },
+  { icon: <Coins size={22} />,      label: 'Comissoes',  href: '/commissions' },
+  { icon: <CreditCard size={22} />, label: 'Pagamentos', href: '/payments' },
+  { icon: <Receipt size={22} />,    label: 'Debitos',    href: '/debitos' },
 ];
 
 export function BottomNavBar() {
@@ -21,7 +19,7 @@ export function BottomNavBar() {
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-[var(--color-card-bg)] border-t border-[var(--color-border)] safe-area-bottom md:hidden">
-      <div className="flex items-stretch h-16">
+      <div className="flex items-stretch" style={{ height: 'var(--bottom-nav-height)' }}>
         {BASE_NAV.map((item) => {
           const isActive = currentPath === item.href || currentPath.startsWith(item.href + '/');
           return (

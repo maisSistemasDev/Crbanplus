@@ -9,6 +9,7 @@ de módulos específicos. Qualquer alteração manual pode ser sobrescrita.
 from .usuario import (
     UserListCreateView,
     UserDetailView,
+    UserActivationView,
     CreateManagerView,
     CurrentUserView
 )
@@ -29,7 +30,8 @@ from .lider import (
 # Importações de views de empresa
 from .empresa import (
     CompanyListCreateView,
-    CompanyDetailView
+    CompanyDetailView,
+    CompanyActivationView,
 )
 
 
@@ -51,14 +53,14 @@ from .setup import (
 # Expor todas as views para manter compatibilidade com importações existentes
 __all__ = [
     # Views de usuário
-    'UserListCreateView', 'UserDetailView', 'VendedoresListView', 'VendedorDetailView',
+    'UserListCreateView', 'UserDetailView', 'UserActivationView', 'VendedoresListView', 'VendedorDetailView',
     'CreateManagerView', 'CurrentUserView',
 
     # Views de líder
     'LideresCreateListView', 'ChangeLeaderView', 'BatchChangeLeaderView',
 
     # Views de empresa
-    'CompanyListCreateView', 'CompanyDetailView',
+    'CompanyListCreateView', 'CompanyDetailView', 'CompanyActivationView',
 
     # Views de campos de formulário
     'UserFormFieldsView', 'UserCreateFormFieldsView', 'CompanyFormFieldsView',

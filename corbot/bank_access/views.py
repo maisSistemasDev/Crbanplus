@@ -4,6 +4,7 @@ from django.shortcuts import get_object_or_404
 
 from .models import BankAccess, AccessLog
 from .serializers import BankAccessSerializer, AccessLogSerializer
+from .services import bank_access_queryset_for_actor, filter_bank_accesses_by_user_profile
 from core.permissions import IsGerente, IsGerenteOrLider, IsAdmin, IsAdminOrGerente, IsAdminOrGerenteOrLider
 from core.base_views import BaseApiView
 
@@ -71,26 +72,7 @@ class BankAccessListCreateView(BaseApiView):
         user = request.user
 
         qs = BankAccess.objects.select_related('bank', 'user', 'created_by')
-    
-        # Admin vê todos
-        if user.role == user.ADMIN:
-            if user.company:
-                accesses = qs.filter(user__company=user.company)
-            else:
-                accesses = qs.all()
-        # Gerente vê todos os acessos da empresa
-        elif user.role == user.GERENTE:
-            if user.company:
-                accesses = qs.filter(user__company=user.company)
-            else:
-                accesses = qs.all()
-        # Líder vê apenas os acessos dos seus vendedores
-        elif user.role == user.LIDER:
-            team_users = user.team_members.all()
-            accesses = qs.filter(user__in=team_users)
-        # Vendedor vê apenas seus próprios acessos
-        else:
-            accesses = qs.filter(user=user)
+        accesses = bank_access_queryset_for_actor(qs, user)
 
         self.log_info(
             request=request,
@@ -113,9 +95,17 @@ class BankAccessListCreateView(BaseApiView):
         if bank_id:
             accesses = accesses.filter(bank_id=bank_id)
 
+        user_id = request.query_params.get('user', '').strip()
+        if user_id:
+            accesses = filter_bank_accesses_by_user_profile(accesses, user_id)
+
         from rest_framework.pagination import PageNumberPagination
         paginator = PageNumberPagination()
-        paginator.page_size = 10
+        try:
+            page_size = int(request.query_params.get('page_size', 10))
+            paginator.page_size = min(max(page_size, 1), 100)
+        except (TypeError, ValueError):
+            paginator.page_size = 10
         page = paginator.paginate_queryset(accesses, request)
         serializer = BankAccessSerializer(page, many=True)
         return paginator.get_paginated_response(serializer.data)
@@ -168,23 +158,8 @@ class BankAccessDetailView(BaseApiView):
         Obtém o acesso bancário de acordo com a hierarquia do usuário.
         """
         qs = BankAccess.objects.select_related('bank', 'user', 'created_by')
-        # Admin vê tudo
-        if user.role == user.ADMIN:
-            if user.company:
-                return get_object_or_404(qs, pk=pk, user__company=user.company)
-            return get_object_or_404(qs, pk=pk)
-        # Gerente vê todos os acessos da empresa
-        elif user.role == user.GERENTE:
-            if user.company:
-                return get_object_or_404(qs, pk=pk, user__company=user.company)
-            return get_object_or_404(qs, pk=pk)
-        # Líder vê apenas os acessos dos seus vendedores
-        elif user.role == user.LIDER:
-            team_users = user.team_members.all()
-            return get_object_or_404(qs, pk=pk, user__in=team_users)
-        # Vendedor vê apenas seus próprios acessos
-        else:
-            return get_object_or_404(qs, pk=pk, user=user)
+        accesses = bank_access_queryset_for_actor(qs, user)
+        return get_object_or_404(accesses, pk=pk)
     
     def get(self, request, pk, format=None):
         """

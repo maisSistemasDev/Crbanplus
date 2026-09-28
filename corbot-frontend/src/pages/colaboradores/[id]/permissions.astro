@@ -1,0 +1,10 @@
+---
+import DashboardLayout from '@/layouts/DashboardLayout.astro';
+import { InternalUserPermissionsPage } from '@/components/react/domain/internal-users/InternalUserPages';
+
+const { id } = Astro.params;
+---
+
+<DashboardLayout title="Permissões do colaborador - CorbanPlus">
+  {id && <InternalUserPermissionsPage client:only="react" userId={id} />}
+</DashboardLayout>

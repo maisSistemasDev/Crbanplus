@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { api } from '../../../../lib/api/client';
 import { ENDPOINTS } from '../../../../lib/api/endpoints';
 import { PageSpinner } from '../../ui/Spinner';
+import { PageHeader } from '../../ui/PageHeader';
 import { formatCurrency } from '../../../../lib/utils/format';
 import { Button } from '../../ui/Button';
 import toast from 'react-hot-toast';
@@ -41,9 +42,7 @@ export function CommissionMirror() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Espelho de Comissoes</h1>
-      </div>
+      <PageHeader title="Espelho de comissões" />
 
       {data.length === 0 ? (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-12 text-center text-gray-400">

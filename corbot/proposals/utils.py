@@ -2,7 +2,7 @@ import re
 import logging
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 import locale
 from .models import LayoutField, Proposal, Layout, Bank, Agreement, Table
 from bank_access.models import BankAccess
@@ -12,6 +12,121 @@ logger = logging.getLogger(__name__)
 
 # Configuração do locale para formatação monetária (Brasil)
 locale.setlocale(locale.LC_ALL, 'pt_BR.UTF-8')
+
+_BR_DATE_FORMATS = (
+    '%d/%m/%Y', '%d-%m-%Y', '%d.%m.%Y',
+    '%d/%m/%y', '%d-%m-%y', '%d.%m.%y',
+    '%Y-%m-%d', '%Y/%m/%d',
+    '%d/%m/%Y %H:%M:%S', '%d/%m/%Y %H:%M',
+    '%d-%m-%Y %H:%M:%S', '%d-%m-%Y %H:%M',
+    '%d.%m.%Y %H:%M:%S', '%d.%m.%Y %H:%M',
+    '%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M',
+    '%Y-%m-%d %H:%M:%S.%f',
+    '%Y-%m-%dT%H:%M:%S', '%Y-%m-%dT%H:%M:%S.%f',
+)
+
+_FILE_AS_TEXT = dict(dtype=str, keep_default_na=False)
+
+
+def parse_brazilian_datetime(value) -> datetime | None:
+    """Interpreta data/hora no padrão brasileiro (dia/mês/ano). Evita o swap MM/DD do pandas."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=None) if value.tzinfo else value
+    if isinstance(value, pd.Timestamp):
+        if pd.isna(value):
+            return None
+        return value.to_pydatetime().replace(tzinfo=None)
+    if isinstance(value, date):
+        return datetime.combine(value, datetime.min.time())
+    try:
+        if pd.isna(value):
+            return None
+    except (ValueError, TypeError):
+        pass
+    if hasattr(value, 'dtype') and 'datetime' in str(getattr(value, 'dtype', '')):
+        parsed = pd.Timestamp(value)
+        if pd.isna(parsed):
+            return None
+        return parsed.to_pydatetime().replace(tzinfo=None)
+
+    if isinstance(value, (int, float, np.integer, np.floating)) and not isinstance(value, bool):
+        numeric = float(value)
+        if 631152000 <= numeric <= 2524608000:
+            try:
+                return datetime.fromtimestamp(numeric)
+            except (ValueError, OSError, OverflowError):
+                pass
+        if 30000 <= numeric <= 73000:
+            try:
+                return datetime(1899, 12, 30) + timedelta(days=int(numeric))
+            except (ValueError, OverflowError):
+                pass
+
+    text = str(value).strip()
+    if not text or text.lower() in {'nan', 'none', 'nat', 'null', ''}:
+        return None
+    if text.endswith('Z'):
+        text = text[:-1]
+    if len(text) > 10:
+        text = re.split(r'[+-]\d{2}:?\d{2}$', text)[0]
+
+    if re.fullmatch(r'\d{4,5}(?:\.0+)?', text):
+        numeric = float(text)
+        if 30000 <= numeric <= 73000:
+            return datetime(1899, 12, 30) + timedelta(days=int(numeric))
+
+    for fmt in _BR_DATE_FORMATS:
+        try:
+            return datetime.strptime(text, fmt)
+        except ValueError:
+            continue
+
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        pass
+
+    parsed = pd.to_datetime(text, dayfirst=True, errors='coerce')
+    if pd.notna(parsed):
+        return parsed.to_pydatetime().replace(tzinfo=None)
+    raise ValueError(f"Formato de data não reconhecido: {value!r}")
+
+
+def parse_brazilian_date(value) -> date | None:
+    parsed = parse_brazilian_datetime(value)
+    return parsed.date() if parsed else None
+
+
+def parse_loose_decimal(value: str) -> float:
+    """Converte string monetária/decimal PT-BR, US ou '3.062.83' (ponto milhar + decimal)."""
+    text = re.sub(r'[^\d,.\-]', '', str(value).strip())
+    if not text or text in {'.', ',', '-', '-.', '-,'}:
+        raise ValueError(f'Valor numérico vazio: {value!r}')
+    negative = text.startswith('-')
+    text = text.lstrip('-')
+    if ',' in text and '.' in text:
+        if text.rfind(',') > text.rfind('.'):
+            text = text.replace('.', '').replace(',', '.')
+        else:
+            text = text.replace(',', '')
+    elif text.count('.') > 1:
+        parts = text.split('.')
+        if len(parts[-1]) in (1, 2):
+            text = ''.join(parts[:-1]) + '.' + parts[-1]
+        else:
+            text = text.replace('.', '')
+    elif text.count(',') > 1:
+        parts = text.split(',')
+        if len(parts[-1]) in (1, 2):
+            text = ''.join(parts[:-1]) + '.' + parts[-1]
+        else:
+            text = text.replace(',', '')
+    else:
+        text = text.replace(',', '.')
+    number = float(text)
+    return -number if negative else number
 
 
 def detect_file_type(file_path):
@@ -39,14 +154,23 @@ def read_file_columns(file_path, sheet_name=None, has_header=True, skip_rows=0, 
     try:
         # Leitura do cabeçalho e algumas linhas para amostra
         if file_type == 'csv':
-            df = pd.read_csv(file_path, nrows=sample_rows + skip_rows, encoding='utf-8', sep=None, engine='python')
+            df = pd.read_csv(
+                file_path,
+                nrows=sample_rows + skip_rows,
+                encoding='utf-8',
+                sep=None,
+                engine='python',
+                **_FILE_AS_TEXT,
+            )
             if not has_header:
                 df.columns = [f'Coluna {i+1}' for i in range(len(df.columns))]
         else:  # Excel (xls ou xlsx)
             if sheet_name:
-                df = pd.read_excel(file_path, sheet_name=sheet_name, nrows=sample_rows + skip_rows)
+                df = pd.read_excel(
+                    file_path, sheet_name=sheet_name, nrows=sample_rows + skip_rows, **_FILE_AS_TEXT
+                )
             else:
-                df = pd.read_excel(file_path, nrows=sample_rows + skip_rows)
+                df = pd.read_excel(file_path, nrows=sample_rows + skip_rows, **_FILE_AS_TEXT)
             
             if not has_header:
                 df.columns = [f'Coluna {i+1}' for i in range(len(df.columns))]
@@ -296,142 +420,25 @@ def convert_value(value, data_type):
         
         elif data_type == LayoutField.DATATYPE_DECIMAL:
             if isinstance(value, str):
-                value = value.strip().replace(',', '.')
+                value = value.strip()
                 if not value:
                     return None
-                return float(value)
+                return parse_loose_decimal(value)
             return float(value)
         
         elif data_type == LayoutField.DATATYPE_CURRENCY:
             if isinstance(value, str):
-                # Remove R$ e outros caracteres não numéricos, exceto ponto e vírgula
-                value = re.sub(r'[^\d,.]', '', value.strip())
-                # Substitui vírgula por ponto
-                value = value.replace(',', '.')
-                if not value:
-                    return None
-                return float(value)
-            return float(value)
-        
-        elif data_type == LayoutField.DATATYPE_DATE:
-            if isinstance(value, (datetime, pd.Timestamp)):
-                return value.date()
-            
-            if isinstance(value, int):
-                # Verifica se é um timestamp Unix válido (depois de 1/1/1990 e antes de 1/1/2050)
-                # Timestamps Unix válidos estão entre 631152000 (1990) e 2524608000 (2050)
-                if 631152000 <= value <= 2524608000:  # Range válido para timestamps Unix
-                    try:
-                        return datetime.fromtimestamp(value).date()
-                    except (ValueError, OSError, OverflowError):
-                        pass
-                
-                # Se não for timestamp Unix válido, pode ser número serial do Excel
-                # Excel usa 1/1/1900 como data base (serial number 1)
-                # Inclui 0 que representa 30/12/1899 no Excel
-                if 0 <= value <= 73000:  # Range aproximado para datas Excel (1899-2099)
-                    try:
-                        # Excel considera 1900 como ano bissexto erroneamente, então ajusta
-                        excel_epoch = datetime(1899, 12, 30)  # 30 de dezembro de 1899
-                        return (excel_epoch + timedelta(days=value)).date()
-                    except (ValueError, OverflowError):
-                        pass
-                
-                # Se não conseguiu converter de forma inteligente, deixa pandas tentar
-                try:
-                    timestamp = pd.to_datetime(value, errors='coerce')
-                    if pd.notna(timestamp):
-                        return timestamp.date()
-                except Exception:
-                    pass
-                
-                raise ValueError(f"Não foi possível converter o valor numérico '{value}' para data")
-            
-            if isinstance(value, str):
                 value = value.strip()
                 if not value:
                     return None
-                    
-                date_formats = [
-                    '%d/%m/%Y', '%d-%m-%Y', '%d.%m.%Y',
-                    '%d/%m/%y', '%d-%m-%y', '%d.%m.%y'
-                ]
-                
-                for date_format in date_formats:
-                    try:
-                        return datetime.strptime(value, date_format).date()
-                    except ValueError:
-                        continue
-                
-                # Se não conseguiu converter com os formatos, tenta com pandas
-                try:
-                    timestamp = pd.to_datetime(value, errors='coerce')
-                    if pd.notna(timestamp):
-                        return timestamp.date()
-                except Exception:
-                    pass
-                    
-                raise ValueError(f"Formato de data não reconhecido: {str(value)}")
-            else:
-                # Se não for string nem datetime, tenta converter com pandas
-                try:
-                    timestamp = pd.to_datetime(value, errors='coerce')
-                    if pd.notna(timestamp):
-                        return timestamp.date()
-                    else:
-                        raise ValueError(f"Não foi possível converter '{value}' (tipo: {type(value)}) para date")
-                except Exception:
-                    raise ValueError(f"Formato de data não reconhecido: {str(value)} (tipo: {type(value)})")
+                return parse_loose_decimal(value)
+            return float(value)
+        
+        elif data_type == LayoutField.DATATYPE_DATE:
+            return parse_brazilian_date(value)
 
         elif data_type == LayoutField.DATATYPE_DATETIME:
-            # Primeiro, verifica se já é um datetime válido
-            if isinstance(value, (datetime, pd.Timestamp)):
-                return value.to_pydatetime() if hasattr(value, 'to_pydatetime') else value
-            
-            # Se não for string, tenta converter com pandas primeiro
-            if not isinstance(value, str):
-                try:
-                    timestamp = pd.to_datetime(value, errors='coerce')
-                    if pd.notna(timestamp):
-                        return timestamp.to_pydatetime()
-                    else:
-                        raise ValueError(f"Não foi possível converter '{value}' (tipo: {type(value)}) para datetime")
-                except Exception as e:
-                    raise ValueError(f"Formato de data e hora não reconhecido: {str(value)} (tipo: {type(value)})")
-            
-            # Se chegou aqui, é uma string
-            value = value.strip()
-            if not value:
-                return None
-                
-            # Tenta formatos comuns brasileiros primeiro
-            datetime_formats = [
-                '%d/%m/%Y %H:%M:%S', '%d/%m/%Y %H:%M',
-                '%d-%m-%Y %H:%M:%S', '%d-%m-%Y %H:%M',
-                '%d.%m.%Y %H:%M:%S', '%d.%m.%Y %H:%M'
-            ]
-            
-            for datetime_format in datetime_formats:
-                try:
-                    return datetime.strptime(value, datetime_format)
-                except ValueError:
-                    continue
-            
-            # Tenta formatos ISO 8601 - APENAS SE FOR STRING
-            try:
-                return datetime.fromisoformat(value)
-            except (ValueError, TypeError):
-                pass
-                
-            # Como último recurso, tenta com pandas
-            try:
-                timestamp = pd.to_datetime(value, errors='coerce')
-                if pd.notna(timestamp):
-                    return timestamp.to_pydatetime()
-            except Exception:
-                pass
-                
-            raise ValueError(f"Formato de data e hora não reconhecido: {str(value)}")
+            return parse_brazilian_datetime(value)
 
         elif data_type == LayoutField.DATATYPE_CPF:
             cpf = re.sub(r'[^\d]', '', str(value).strip())
@@ -505,38 +512,74 @@ def get_required_fields(exclude_fields=[]):
     return required_fields
 
 
+# Campos exibidos na criação de layout (CSV / ETL), na ordem da UI.
+# Acessos fica no topo para mapear login do arquivo (username / CPF / e-mail).
+LAYOUT_MAPPING_FIELDS = [
+    ('bank_access', 'Acessos'),
+    ('digitador', 'Digitador'),
+    ('contract_number', None),
+    ('agreement', None),
+    ('table', None),
+    ('status', None),
+    ('disbursement_date', None),
+    ('amount', None),
+    ('client_document', None),
+    ('client_name', None),
+]
+
+
+def _field_info(field, verbose_name=None):
+    label = verbose_name or getattr(field, 'verbose_name', field.name)
+    info = {
+        'name': field.name,
+        'verbose_name': str(label),
+        'type': field.__class__.__name__,
+        'required': False,
+        'has_default': field.has_default() if hasattr(field, 'has_default') else False,
+    }
+    if hasattr(field, 'blank'):
+        info['blank'] = field.blank
+        info['null'] = field.null
+        info['required'] = not field.blank and not field.null and not field.has_default()
+    return info
+
+
 def get_model_fields(exclude_fields=[]):
     """
     Obtém todos os campos do modelo Proposal com suas propriedades.
-    Retorna um dicionário com informações sobre cada campo.
+    Retorna uma lista com informações sobre cada campo.
     """
-
     req_fields = []
     for field in Proposal._meta.get_fields():
-        # Ignora campos de relação reversa
-        
         if field.is_relation and field.auto_created and not field.concrete:
             continue
-            
-        field_info = {
-            'name': field.name,
-            'verbose_name': getattr(field, 'verbose_name', field.name),
-            'type': field.__class__.__name__,
-            'required': False,
-            'has_default': field.has_default() if hasattr(field, 'has_default') else False,
+        if field.name in exclude_fields:
+            continue
+        label_overrides = {
+            'bank_access': 'Acessos',
+            'digitador': 'Digitador',
         }
-        
-        # Adiciona propriedades específicas para campos concretos
-        if hasattr(field, 'blank'):
-            field_info['blank'] = field.blank
-            field_info['null'] = field.null
-            field_info['required'] = not field.blank and not field.null and not field.has_default()
-            
-        if field.name not in exclude_fields:
-            req_fields.append(field_info)
-        
-    
+        req_fields.append(_field_info(field, label_overrides.get(field.name)))
     return req_fields
+
+
+def get_layout_mapping_fields():
+    """
+    Campos disponíveis para relacionar colunas do arquivo na criação de layout.
+    Lista explícita: garante Acessos (bank_access) visível e na ordem certa.
+    """
+    fields_by_name = {}
+    for field in Proposal._meta.get_fields():
+        if getattr(field, 'name', None):
+            fields_by_name[field.name] = field
+
+    result = []
+    for name, label in LAYOUT_MAPPING_FIELDS:
+        field = fields_by_name.get(name)
+        if field is None:
+            continue
+        result.append(_field_info(field, label))
+    return result
 
 def get_file_type(file_path):
     """
@@ -553,8 +596,10 @@ def get_file_data(file_path):
     file_type = get_file_type(file_path)
     if file_type == 'csv':
         try:
-            # Detecta separador automaticamente (csv pode usar ;, \t, etc.)
-            return pd.read_csv(file_path, sep=None, engine='python', encoding='utf-8')
+            # Texto puro: pandas não pode inferir 10/09/2026 como 9 de outubro (MM/DD).
+            return pd.read_csv(
+                file_path, sep=None, engine='python', encoding='utf-8', **_FILE_AS_TEXT
+            )
         except (UnicodeDecodeError, pd.errors.ParserError):
             try:
                 return pd.read_csv(
@@ -562,7 +607,8 @@ def get_file_data(file_path):
                     sep=None,
                     engine='python',
                     encoding='latin-1',
-                    on_bad_lines='skip'
+                    on_bad_lines='skip',
+                    **_FILE_AS_TEXT,
                 )
             except Exception:
                 return pd.read_csv(
@@ -572,12 +618,11 @@ def get_file_data(file_path):
                     encoding='utf-8',
                     on_bad_lines='skip',
                     quoting=1,
-                    skipinitialspace=True
+                    skipinitialspace=True,
+                    **_FILE_AS_TEXT,
                 )
-    elif file_type == 'xls':
-        return pd.read_excel(file_path)
-    elif file_type == 'xlsx':
-        return pd.read_excel(file_path)
+    elif file_type in ('xls', 'xlsx'):
+        return pd.read_excel(file_path, **_FILE_AS_TEXT)
     return None
 
 def file_to_dict(file_path):

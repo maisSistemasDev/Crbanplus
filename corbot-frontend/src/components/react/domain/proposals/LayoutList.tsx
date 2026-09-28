@@ -3,11 +3,13 @@ import { api } from '../../../../lib/api/client';
 import { ENDPOINTS } from '../../../../lib/api/endpoints';
 import { DataTable } from '../../ui/DataTable';
 import { Button } from '../../ui/Button';
-import { Badge } from '../../ui/Badge';
+import { PageHeader } from '../../ui/PageHeader';
 import { formatDate } from '../../../../lib/utils/format';
+import { extractErrorMessage } from '../../../../lib/api/errors';
 import type { Layout, PaginatedResponse } from '../../../../lib/api/types';
 import type { Column } from '../../ui/DataTable';
-import { Plus, Search } from 'lucide-react';
+import { Plus, Search, Trash2 } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 const columns: Column<Record<string, unknown>>[] = [
   { key: 'name', header: 'Nome', sortable: true },
@@ -27,12 +29,45 @@ const columns: Column<Record<string, unknown>>[] = [
   },
 ];
 
+function LayoutBulkDeleteButton({
+  selectedKeys,
+  onDeleted,
+}: {
+  selectedKeys: Set<string>;
+  onDeleted: () => void;
+}) {
+  const [deleting, setDeleting] = useState(false);
+
+  async function handleDelete() {
+    if (selectedKeys.size === 0) return;
+    if (!window.confirm(`Deseja excluir ${selectedKeys.size} layout(s) selecionado(s)? Esta ação não pode ser desfeita.`)) return;
+    setDeleting(true);
+    try {
+      await api.delete(ENDPOINTS.LAYOUTS_BULK_DELETE, { ids: [...selectedKeys] });
+      toast.success(`${selectedKeys.size} layout(s) excluído(s) com sucesso!`);
+      onDeleted();
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  return (
+    <Button variant="danger" size="sm" onClick={handleDelete} disabled={deleting}>
+      <Trash2 size={16} />
+      {deleting ? 'Excluindo...' : `Excluir ${selectedKeys.size} selecionado(s)`}
+    </Button>
+  );
+}
+
 export function LayoutList() {
   const [data, setData] = useState<Record<string, unknown>[]>([]);
   const [totalItems, setTotalItems] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -60,17 +95,19 @@ export function LayoutList() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Layouts de Importacao</h1>
-        <a href="/proposals/layouts/create">
-          <Button>
-            <Plus size={16} />
-            Novo Layout
-          </Button>
-        </a>
-      </div>
+      <PageHeader
+        title="Layouts de importação"
+        actions={
+          <a href="/proposals/layouts/create">
+            <Button size="sm">
+              <Plus size={16} />
+              Novo layout
+            </Button>
+          </a>
+        }
+      />
 
-      <div className="mb-4">
+      <div className="mb-4 flex items-center gap-3 flex-wrap">
         <div className="relative max-w-sm">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
@@ -84,6 +121,12 @@ export function LayoutList() {
             className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-[var(--color-primary)]"
           />
         </div>
+        {selectedKeys.size > 0 && (
+          <LayoutBulkDeleteButton
+            selectedKeys={selectedKeys}
+            onDeleted={() => { setSelectedKeys(new Set()); fetchData(); }}
+          />
+        )}
       </div>
 
       <DataTable
@@ -95,6 +138,9 @@ export function LayoutList() {
         onPageChange={setCurrentPage}
         keyExtractor={(item) => item.id as string}
         emptyMessage="Nenhum layout encontrado"
+        selectable
+        selectedKeys={selectedKeys}
+        onSelectionChange={setSelectedKeys}
       />
     </div>
   );

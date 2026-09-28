@@ -7,6 +7,7 @@ from .views import (
     ConversationListCreateView,
     ConversationDetailView,
     ConversationMessageView,
+    AiSuggestMappingView,
 )
 
 urlpatterns = [
@@ -19,4 +20,7 @@ urlpatterns = [
     path('ai/conversations/', ConversationListCreateView.as_view(), name='ai-conversation-list'),
     path('ai/conversations/<int:pk>/', ConversationDetailView.as_view(), name='ai-conversation-detail'),
     path('ai/conversations/<int:pk>/message/', ConversationMessageView.as_view(), name='ai-conversation-message'),
+
+    # Sugestão de mapeamento de colunas
+    path('ai/suggest-mapping/', AiSuggestMappingView.as_view(), name='ai-suggest-mapping'),
 ]
